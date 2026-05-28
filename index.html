@@ -873,6 +873,7 @@
     <div class="form-group" id="newBatsmanGroup">
       <label>Incoming Batsman</label>
       <select id="newBatsman"></select>
+      <div id="lastWicketNote" class="alert alert-warning" style="display:none;margin-top:8px;">⚠ Last wicket — innings will end after this dismissal.</div>
     </div>
     <div class="btn-group mt-10">
       <button class="btn btn-danger" onclick="recordWicket()">Record Wicket</button>
@@ -1091,8 +1092,8 @@ function recordBall(runs) {
   inn.currentOverBalls.push({ type: runs === 0 ? '0' : String(runs), runs });
   inn.lastBall = { desc: `${runs} run(s) — ${striker.name}`, runs };
 
-  // Swap on odd runs
-  if (runs % 2 !== 0) swapBatsmen();
+  // Swap on odd runs — but NOT if last batsman is alone (N-1 wickets gone)
+  if (runs % 2 !== 0 && !isLastBatsmanAlone()) swapBatsmen();
 
   checkOverComplete(false);
   checkInningsEnd();
@@ -1125,7 +1126,7 @@ function recordExtra() {
     inn.currentOverBalls.push({ type: 'WD', runs: runsEntered, extra: true });
     inn.lastBall = { desc: `Wide +${runsEntered}`, runs: runsEntered };
     // On wide + runs, batsmen don't swap unless odd running between wickets
-    if ((runsEntered - 1) % 2 !== 0 && runsEntered > 1) swapBatsmen();
+    if ((runsEntered - 1) % 2 !== 0 && runsEntered > 1 && !isLastBatsmanAlone()) swapBatsmen();
   } else if (type === 'NB') {
     // No ball: 1 extra run + any runs off bat
     const batRuns = runsEntered;
@@ -1138,7 +1139,7 @@ function recordExtra() {
     // NB: bat runs count for batsman, no legal ball
     inn.currentOverBalls.push({ type: `NB+${batRuns}`, runs: total, extra: true });
     inn.lastBall = { desc: `No Ball +${total} (bat: ${batRuns})`, runs: total };
-    if (batRuns % 2 !== 0) swapBatsmen();
+    if (batRuns % 2 !== 0 && !isLastBatsmanAlone()) swapBatsmen();
     if (batRuns === 4) inn.batsmen[inn.strikerIdx].fours++;
     if (batRuns === 6) inn.batsmen[inn.strikerIdx].sixes++;
   }
@@ -1173,7 +1174,7 @@ function recordByes() {
 
   inn.currentOverBalls.push({ type: currentByesType, runs, extra: true });
   inn.lastBall = { desc: `${currentByesType} ${runs}`, runs };
-  if (runs % 2 !== 0) swapBatsmen();
+  if (runs % 2 !== 0 && !isLastBatsmanAlone()) swapBatsmen();
 
   closeModal('byesModal');
   checkOverComplete(false);
@@ -1196,9 +1197,16 @@ function openWicketModal() {
 
   const available = inn.batsmen.filter(b => b.status === 'yet to bat');
   const newBatSel = document.getElementById('newBatsman');
-  newBatSel.innerHTML = available.length
-    ? available.map(b => `<option value="${inn.batsmen.indexOf(b)}">${b.name}</option>`).join('')
-    : '<option value="-1">No more batsmen</option>';
+  const newBatGroup = document.getElementById('newBatsmanGroup');
+  if (available.length === 0) {
+    newBatGroup.style.display = '';
+    newBatSel.innerHTML = '<option value="-1">No more batsmen</option>';
+    document.getElementById('lastWicketNote').style.display = '';
+  } else {
+    newBatGroup.style.display = '';
+    document.getElementById('lastWicketNote').style.display = 'none';
+    newBatSel.innerHTML = available.map(b => `<option value="${inn.batsmen.indexOf(b)}">${b.name}</option>`).join('');
+  }
 
   updateWicketFields();
   document.getElementById('wicketRuns').value = '0';
@@ -1300,25 +1308,39 @@ function recordWicket() {
   inn.lastBall = { desc: `WICKET — ${outBatsman.name} (${dismissalText})`, runs, wicket: true };
 
   // New batsman
-  const newBatIdx = parseInt(document.getElementById('newBatsman').value);
-  if (newBatIdx >= 0 && inn.wickets < inn.batsmen.length - 1) {
-    inn.batsmen[newBatIdx].status = 'batting';
+  const available2 = inn.batsmen.filter(b => b.status === 'yet to bat');
+  const isLastMan = available2.length === 0;
+
+  if (!isLastMan) {
+    const newBatIdx = parseInt(document.getElementById('newBatsman').value);
+    if (newBatIdx >= 0) {
+      inn.batsmen[newBatIdx].status = 'batting';
+      if (outIdx === inn.strikerIdx) {
+        // runs swap
+        if (runs % 2 !== 0) {
+          inn.strikerIdx = inn.nonStrikerIdx;
+          inn.nonStrikerIdx = newBatIdx;
+        } else {
+          inn.strikerIdx = newBatIdx;
+        }
+      } else {
+        // Non-striker run out
+        if (runs % 2 !== 0) {
+          inn.nonStrikerIdx = inn.strikerIdx;
+          inn.strikerIdx = newBatIdx;
+        } else {
+          inn.nonStrikerIdx = newBatIdx;
+        }
+      }
+    }
+  } else {
+    // Last wicket — innings ends. Striker remains (already set as not dismissed if non-striker was run out)
+    // Just mark striker as "not out" if still batting
     if (outIdx === inn.strikerIdx) {
-      // Runs swap
-      if (runs % 2 !== 0) {
-        inn.strikerIdx = inn.nonStrikerIdx;
-        inn.nonStrikerIdx = newBatIdx;
-      } else {
-        inn.strikerIdx = newBatIdx;
-      }
+      // striker was out — innings ends, no one left
     } else {
-      // Non-striker run out
-      if (runs % 2 !== 0) {
-        inn.nonStrikerIdx = inn.strikerIdx;
-        inn.strikerIdx = newBatIdx;
-      } else {
-        inn.nonStrikerIdx = newBatIdx;
-      }
+      // non-striker was out (run out), striker stays but no partner — innings ends
+      // Striker remains as last not-out bat
     }
   }
 
@@ -1369,13 +1391,19 @@ function checkOverComplete(forced) {
     });
     inn.currentOverBalls = [];
     inn.currentOverRunsTemp = 0;
-    swapBatsmen(); // end of over swap
+    if (!isLastBatsmanAlone()) swapBatsmen(); // end of over swap
 
     if (Math.floor(inn.balls / 6) < state.totalOvers) {
       // Prompt for new bowler
       openNewBowlerModal();
     }
   }
+}
+
+// Returns true when N-1 wickets have fallen — last batsman bats alone, no swapping
+function isLastBatsmanAlone() {
+  const inn = state.currentInnings;
+  return inn.wickets >= inn.batsmen.length - 1;
 }
 
 function swapBatsmen() {
@@ -1385,9 +1413,9 @@ function swapBatsmen() {
 
 function checkInningsEnd() {
   const inn = state.currentInnings;
-  const overs = Math.floor(inn.balls / 6);
-  const allOut = inn.wickets >= inn.batsmen.length - 1;
-  const oversUp = overs >= state.totalOvers && inn.currentOverBalls.filter(b=>!b.extra).length >= 6 || (inn.balls >= state.totalOvers * 6);
+  // All out = ALL batsmen dismissed (last man can still bat until his wicket falls)
+  const allOut = inn.wickets >= inn.batsmen.length;
+  const oversUp = inn.balls >= state.totalOvers * 6;
 
   // Check if target chased (2nd innings)
   if (state.innings === 2) {
@@ -1398,7 +1426,7 @@ function checkInningsEnd() {
     }
   }
 
-  if (allOut || inn.balls >= state.totalOvers * 6) {
+  if (allOut || oversUp) {
     if (state.innings === 1) {
       setTimeout(goToInningsBreak, 400);
     } else {
