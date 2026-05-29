@@ -226,23 +226,63 @@ select option{background:#111;}
     <div class="match-list" id="matchList"><div class="color-dim text-center" style="padding:20px;">Loading...</div></div>
   </div>
   <div id="adminCreateBtn" style="display:none;">
-    <button class="btn btn-primary" style="width:100%;padding:13px;" onclick="showPage('pageSetup')">+ CREATE NEW MATCH</button>
+    <button class="btn btn-primary" style="width:100%;padding:13px;" onclick="newMatchSetup()">+ CREATE NEW MATCH</button>
     <button class="btn btn-secondary" style="width:100%;padding:11px;margin-top:8px;" onclick="showPlayersPage()">⚙ MANAGE PLAYERS</button>
   </div>
   <div id="guestHint" style="display:none;" class="alert alert-info mt-10">👁 Guest mode — tap any match to view live scorecard.</div>
 </div>
 
-<!-- PAGE: PLAYERS -->
+<!-- PAGE: MANAGE -->
 <div class="page" id="pagePlayers">
-  <div class="card">
-    <div class="card-title">🏏 Player Pool <span style="margin-left:auto;font-family:'Rajdhani';font-size:13px;color:var(--text-dim);">(<span id="poolCount">0</span>)</span></div>
-    <div class="form-row">
-      <div class="form-group"><label>New Player</label><input type="text" id="poolPlayerInput" placeholder="Player name" autocomplete="off"></div>
-      <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-primary" onclick="addPoolPlayer()" style="width:100%">+ Add</button></div>
-    </div>
-    <div class="player-list" id="poolList"></div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showMgTab('mgPlayers',this)">Players</button>
+    <button class="tab-btn" onclick="showMgTab('mgTeams',this)">Teams</button>
+    <button class="tab-btn" onclick="showMgTab('mgConfigs',this)">Configs</button>
   </div>
-  <button class="btn btn-secondary" onclick="goHome()">Back</button>
+  <div class="tab-content active" id="mgPlayers">
+    <div class="card">
+      <div class="card-title">🏏 Player Pool <span style="margin-left:auto;font-family:'Rajdhani';font-size:13px;color:var(--text-dim);">(<span id="poolCount">0</span>)</span></div>
+      <div class="form-row">
+        <div class="form-group"><label>New Player</label><input type="text" id="poolPlayerInput" placeholder="Player name" autocomplete="off"></div>
+        <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-primary" onclick="addPoolPlayer()" style="width:100%">+ Add</button></div>
+      </div>
+      <div class="player-list" id="poolList"></div>
+    </div>
+  </div>
+  <div class="tab-content" id="mgTeams">
+    <div class="card">
+      <div class="card-title">Teams <span style="margin-left:auto;font-family:'Rajdhani';font-size:13px;color:var(--text-dim);">(<span id="teamCount">0</span>)</span></div>
+      <div class="form-group"><label>Team Name</label><input type="text" id="teamBuilderName" placeholder="e.g. Crew Reds" autocomplete="off"></div>
+      <label>Pick Players</label>
+      <div class="player-list" id="teamBuilderPlayers" style="max-height:240px;overflow-y:auto;"></div>
+      <div class="btn-group mt-10">
+        <button class="btn btn-primary" id="saveTeamBtn" onclick="saveTeam()" style="flex:1;">+ Save Team</button>
+        <button class="btn btn-secondary" onclick="resetTeamBuilder()">Clear</button>
+      </div>
+      <div style="border-top:1px solid var(--border);margin:14px 0 10px;"></div>
+      <div class="card-title" style="font-size:15px;">Saved Teams</div>
+      <div class="player-list" id="teamList"></div>
+    </div>
+  </div>
+  <div class="tab-content" id="mgConfigs">
+    <div class="card">
+      <div class="card-title">Configs <span style="margin-left:auto;font-family:'Rajdhani';font-size:13px;color:var(--text-dim);">(<span id="configCount">0</span>)</span></div>
+      <div class="form-group"><label>Config Name</label><input type="text" id="configBuilderName" placeholder="e.g. Saturday 7-over" autocomplete="off"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Team A</label><select id="configTeamA"></select></div>
+        <div class="form-group"><label>Team B</label><select id="configTeamB"></select></div>
+      </div>
+      <div class="form-group"><label>Overs</label><input type="number" id="configBuilderOvers" min="1" max="50" value="7"></div>
+      <div class="btn-group mt-10">
+        <button class="btn btn-primary" id="saveConfigBtn" onclick="saveConfigFull()" style="flex:1;">+ Save Config</button>
+        <button class="btn btn-secondary" onclick="resetConfigBuilder()">Clear</button>
+      </div>
+      <div style="border-top:1px solid var(--border);margin:14px 0 10px;"></div>
+      <div class="card-title" style="font-size:15px;">Saved Configs</div>
+      <div class="player-list" id="configList"></div>
+    </div>
+  </div>
+  <button class="btn btn-secondary" onclick="goHome()" style="margin-top:4px;">Back</button>
 </div>
 
 <!-- PAGE: SETUP -->
@@ -255,10 +295,15 @@ select option{background:#111;}
       <div class="form-group"><label>Match Name</label><input type="text" id="matchName" value="Friendly Match"></div>
       <div class="form-group"><label>Overs</label><input type="number" id="totalOvers" min="1" max="50" value="10"></div>
     </div>
+    <div class="form-group"><label>Load Config (teams + overs)</label><select id="configPicker" onchange="applyConfigFull(this.value)"></select></div>
   </div>
   <div class="card">
     <div class="card-title">Team A</div>
     <div class="form-group"><label>Team Name</label><input type="text" id="teamAName" value="Team Alpha"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Load Team</label><select id="teamPickerA" onchange="loadTeamIntoSide('A',this.value)"></select></div>
+      <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-secondary btn-sm" onclick="saveSideAsTeam('A')" style="width:100%">💾 Save as Team</button></div>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Player</label><input type="text" id="playerAInput" list="playerPoolList" placeholder="Type or pick from pool" autocomplete="off"></div>
       <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-secondary" onclick="addPlayer('A')" style="width:100%">+ Add</button></div>
@@ -269,6 +314,10 @@ select option{background:#111;}
   <div class="card">
     <div class="card-title">Team B</div>
     <div class="form-group"><label>Team Name</label><input type="text" id="teamBName" value="Team Beta"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Load Team</label><select id="teamPickerB" onchange="loadTeamIntoSide('B',this.value)"></select></div>
+      <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-secondary btn-sm" onclick="saveSideAsTeam('B')" style="width:100%">💾 Save as Team</button></div>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Player</label><input type="text" id="playerBInput" list="playerPoolList" placeholder="Type or pick from pool" autocomplete="off"></div>
       <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-secondary" onclick="addPlayer('B')" style="width:100%">+ Add</button></div>
@@ -408,7 +457,7 @@ select option{background:#111;}
   <div id="resultScorecardArea"></div>
   <div class="btn-group mt-10">
     <button class="btn btn-secondary" onclick="goHome()">All Matches</button>
-    <button class="btn btn-primary" id="resultNewMatchBtn" style="display:none;" onclick="showPage('pageSetup')">New Match</button>
+    <button class="btn btn-primary" id="resultNewMatchBtn" style="display:none;" onclick="startNextMatch()">Start Next Match</button>
   </div>
 </div>
 
@@ -503,6 +552,8 @@ let unsubMatch = null;
 let byesType = 'LB';
 let playerPool = [];
 let pendingDismissal = null;
+let savedTeams = [];
+let configs = [];
 
 // ─── SYNC ───
 function setSyncStatus(s){
@@ -671,7 +722,13 @@ function renderPoolManageList(){
 }
 window.showPlayersPage = function(){
   if(!S.isAdmin){alert('Admin only!');return;}
-  renderPoolManageList(); showPage('pagePlayers');
+  renderPoolManageList(); renderTeamControls(); renderConfigControls(); renderTeamBuilder(); showPage('pagePlayers');
+}
+window.showMgTab = function(id,btn){
+  document.querySelectorAll('#pagePlayers .tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#pagePlayers .tab-btn').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active'); if(btn) btn.classList.add('active');
+  if(id==='mgTeams') renderTeamBuilder();
 }
 window.addPoolPlayer = function(){
   if(!S.isAdmin){alert('Admin only!');return;}
@@ -686,6 +743,160 @@ window.deletePoolPlayer = async function(id){
   const p=playerPool.find(x=>x.id===id);
   if(!confirm(`Remove ${p?p.name:'this player'} from the pool?\n(existing matches keep their players)`)) return;
   try{ await deleteDoc(doc(db,'players',id)); }catch(e){ console.error(e); alert('Delete failed'); }
+}
+
+// ─── TEAMS & CONFIGS ───
+let editingTeamId=null, editingConfigId=null;
+function shortId(p){ return p+'_'+Math.random().toString(36).slice(2,8); }
+function teamName(id){ const t=savedTeams.find(x=>x.id===id); return t?t.name:'?'; }
+function loadSavedTeams(){
+  onSnapshot(query(collection(db,'teams'),orderBy('name')), snap=>{
+    savedTeams=snap.docs.map(d=>({id:d.id,...d.data()})); renderTeamControls();
+  }, e=>console.error(e));
+}
+function loadConfigs(){
+  onSnapshot(query(collection(db,'configs'),orderBy('name')), snap=>{
+    configs=snap.docs.map(d=>({id:d.id,...d.data()})); renderConfigControls();
+  }, e=>console.error(e));
+}
+// Team pickers (setup load + config builder selects) + manage list
+function renderTeamControls(){
+  const pick='<option value="">— load team —</option>'+savedTeams.map(t=>`<option value="${t.id}">${t.name} (${(t.playerIds||[]).length})</option>`).join('');
+  ['teamPickerA','teamPickerB'].forEach(id=>{const el=document.getElementById(id); if(el) el.innerHTML=pick;});
+  const cfg='<option value="">— select team —</option>'+savedTeams.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  ['configTeamA','configTeamB'].forEach(id=>{const el=document.getElementById(id); if(el) el.innerHTML=cfg;});
+  const c=document.getElementById('teamCount'); if(c) c.textContent=savedTeams.length;
+  const list=document.getElementById('teamList');
+  if(list) list.innerHTML=savedTeams.length
+    ? savedTeams.map(t=>`<div class="player-item"><span class="player-name">${t.name} <span class="color-dim" style="font-size:11px;">(${(t.playerIds||[]).length})</span></span><span class="btn-group"><button class="btn btn-secondary btn-xs" onclick="editTeam('${t.id}')">Edit</button><button class="btn btn-secondary btn-xs" onclick="deleteTeam('${t.id}')">X</button></span></div>`).join('')
+    : '<div class="color-dim text-center" style="padding:14px;">No teams yet. Build one above.</div>';
+  renderConfigControls();   // config list shows team names → refresh when teams change
+}
+function renderConfigControls(){
+  const opts='<option value="">— load config —</option>'+configs.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const picker=document.getElementById('configPicker'); if(picker) picker.innerHTML=opts;
+  const cc=document.getElementById('configCount'); if(cc) cc.textContent=configs.length;
+  const list=document.getElementById('configList');
+  if(list) list.innerHTML=configs.length
+    ? configs.map(c=>`<div class="player-item"><span class="player-name">${c.name} <span class="color-dim" style="font-size:11px;">(${teamName(c.teamAId)} v ${teamName(c.teamBId)}, ${c.overs} ov)</span></span><span class="btn-group"><button class="btn btn-secondary btn-xs" onclick="editConfig('${c.id}')">Edit</button><button class="btn btn-secondary btn-xs" onclick="deleteConfig('${c.id}')">X</button></span></div>`).join('')
+    : '<div class="color-dim text-center" style="padding:14px;">No configs yet. Pick two teams + overs above.</div>';
+}
+// Team builder (Teams tab) — checkbox list of pool players
+function renderTeamBuilder(){
+  const el=document.getElementById('teamBuilderPlayers'); if(!el) return;
+  el.innerHTML=playerPool.length
+    ? playerPool.map(p=>`<label class="player-item" style="cursor:pointer;"><span class="player-name">${p.name}</span><input type="checkbox" class="tb-player" value="${p.id}" style="width:auto;"></label>`).join('')
+    : '<div class="color-dim" style="font-size:12px;padding:10px;">Add players first (Players tab).</div>';
+}
+window.saveTeam = function(){
+  if(!S.isAdmin){alert('Admin only!');return;}
+  const name=document.getElementById('teamBuilderName').value.trim();
+  const ids=[...document.querySelectorAll('#teamBuilderPlayers .tb-player:checked')].map(c=>c.value);
+  if(!name){alert('Enter a team name.');return;}
+  if(!ids.length){alert('Pick at least one player.');return;}
+  setDoc(doc(db,'teams',editingTeamId||shortId('t')),{name,playerIds:ids,lastUsedAt:Date.now()}).then(resetTeamBuilder).catch(e=>{console.error(e);alert('Save failed');});
+}
+window.resetTeamBuilder = function(){
+  editingTeamId=null;
+  const n=document.getElementById('teamBuilderName'); if(n) n.value='';
+  const b=document.getElementById('saveTeamBtn'); if(b) b.textContent='+ Save Team';
+  document.querySelectorAll('#teamBuilderPlayers .tb-player').forEach(c=>c.checked=false);
+}
+window.editTeam = function(id){
+  const t=savedTeams.find(x=>x.id===id); if(!t) return;
+  editingTeamId=id; renderTeamBuilder();
+  document.getElementById('teamBuilderName').value=t.name;
+  (t.playerIds||[]).forEach(pv=>{const c=document.querySelector(`#teamBuilderPlayers .tb-player[value="${pv}"]`); if(c) c.checked=true;});
+  document.getElementById('saveTeamBtn').textContent='Update Team';
+  window.scrollTo(0,0);
+}
+window.deleteTeam = async function(id){
+  if(!S.isAdmin){alert('Admin only!');return;}
+  const t=savedTeams.find(x=>x.id===id);
+  if(!confirm(`Delete team "${t?t.name:''}"?`)) return;
+  try{ await deleteDoc(doc(db,'teams',id)); }catch(e){console.error(e);alert('Delete failed');}
+}
+// Config builder (Configs tab) — Team A + Team B + overs
+window.saveConfigFull = function(){
+  if(!S.isAdmin){alert('Admin only!');return;}
+  const name=document.getElementById('configBuilderName').value.trim();
+  const teamAId=document.getElementById('configTeamA').value;
+  const teamBId=document.getElementById('configTeamB').value;
+  const overs=parseInt(document.getElementById('configBuilderOvers').value)||0;
+  if(!name||!teamAId||!teamBId||overs<1){alert('Name, both teams, and overs are required.');return;}
+  setDoc(doc(db,'configs',editingConfigId||shortId('c')),{name,teamAId,teamBId,overs,lastUsedAt:Date.now()}).then(resetConfigBuilder).catch(e=>{console.error(e);alert('Save failed');});
+}
+window.resetConfigBuilder = function(){
+  editingConfigId=null;
+  const n=document.getElementById('configBuilderName'); if(n) n.value='';
+  const o=document.getElementById('configBuilderOvers'); if(o) o.value=7;
+  const a=document.getElementById('configTeamA'); if(a) a.value='';
+  const b=document.getElementById('configTeamB'); if(b) b.value='';
+  const btn=document.getElementById('saveConfigBtn'); if(btn) btn.textContent='+ Save Config';
+}
+window.editConfig = function(id){
+  const c=configs.find(x=>x.id===id); if(!c) return;
+  editingConfigId=id;
+  document.getElementById('configBuilderName').value=c.name;
+  document.getElementById('configBuilderOvers').value=c.overs;
+  document.getElementById('configTeamA').value=c.teamAId||'';
+  document.getElementById('configTeamB').value=c.teamBId||'';
+  document.getElementById('saveConfigBtn').textContent='Update Config';
+  window.scrollTo(0,0);
+}
+window.deleteConfig = async function(id){
+  if(!S.isAdmin){alert('Admin only!');return;}
+  const c=configs.find(x=>x.id===id);
+  if(!confirm(`Delete config "${c?c.name:''}"?`)) return;
+  try{ await deleteDoc(doc(db,'configs',id)); }catch(e){console.error(e);alert('Delete failed');}
+}
+// Setup-screen: load one team into a side; save a side as a team; load a full config
+window.loadTeamIntoSide = function(side,teamId,silent){
+  if(!teamId) return;
+  const t=savedTeams.find(x=>x.id===teamId); if(!t) return;
+  localTeams[side].players=(t.playerIds||[]).map(pv=>playerPool.find(p=>p.id===pv)).filter(Boolean).map(p=>({id:p.id,name:p.name,isJoker:false}));
+  document.getElementById(`team${side}Name`).value=t.name;
+  renderPlayerList(side);
+  if(!silent){const el=document.getElementById(`teamPicker${side}`); if(el) el.value='';}
+}
+window.saveSideAsTeam = function(side){
+  if(!S.isAdmin){alert('Admin only!');return;}
+  const players=localTeams[side].players;
+  if(!players.length){alert('Add players to the team first.');return;}
+  const def=document.getElementById(`team${side}Name`).value.trim()||'Team';
+  const name=prompt('Save team as:',def); if(!name||!name.trim()) return;
+  setDoc(doc(db,'teams',shortId('t')),{name:name.trim(),playerIds:players.map(p=>p.id),lastUsedAt:Date.now()}).catch(e=>{console.error(e);alert('Save failed');});
+}
+window.applyConfigFull = function(configId){
+  if(!configId) return;
+  const c=configs.find(x=>x.id===configId); if(!c) return;
+  loadTeamIntoSide('A',c.teamAId,true);
+  loadTeamIntoSide('B',c.teamBId,true);
+  document.getElementById('totalOvers').value=c.overs;
+  document.getElementById('configPicker').value='';
+}
+// Fresh blank setup (home → Create) vs reuse last match's teams+settings (result → Start Next Match)
+window.newMatchSetup = function(){
+  localTeams={A:{players:[]},B:{players:[]}};
+  document.getElementById('teamAName').value='Team Alpha';
+  document.getElementById('teamBName').value='Team Beta';
+  document.getElementById('matchName').value='Friendly Match';
+  document.getElementById('totalOvers').value=10;
+  renderPlayerList('A'); renderPlayerList('B');
+  S.innings1=null;S.innings2=null;S.currentInnings=null;S.matchOver=false;S.innings=1;S.matchId=null;
+  showPage('pageSetup');
+}
+window.startNextMatch = function(){
+  if(!S.isAdmin) return;
+  localTeams.A.players=(S.teams.A.players||[]).map(p=>({id:pid(p)||genPlayerId(),name:pname(p),isJoker:!!(p&&p.isJoker)}));
+  localTeams.B.players=(S.teams.B.players||[]).map(p=>({id:pid(p)||genPlayerId(),name:pname(p),isJoker:!!(p&&p.isJoker)}));
+  document.getElementById('teamAName').value=S.teams.A.name||'Team Alpha';
+  document.getElementById('teamBName').value=S.teams.B.name||'Team Beta';
+  document.getElementById('totalOvers').value=S.totalOvers||10;
+  document.getElementById('matchName').value=S.matchName||'Friendly Match';
+  renderPlayerList('A'); renderPlayerList('B');
+  S.innings1=null;S.innings2=null;S.currentInnings=null;S.matchOver=false;S.innings=1;S.matchId=null;
+  showPage('pageSetup');
 }
 
 // ─── SETUP ───
@@ -1127,7 +1338,7 @@ async function init(){
   setSyncStatus('connecting');
   try{ await getDoc(doc(db,'matches','__ping__')); }catch(e){}
   setSyncStatus('live');
-  loadPlayerPool();
+  loadPlayerPool(); loadSavedTeams(); loadConfigs();
   // Check session
   const role=sessionStorage.getItem('csRole');
   if(role==='admin'){ S.isAdmin=true; applyRole(); goHome(); }
