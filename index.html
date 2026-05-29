@@ -360,6 +360,7 @@ select option{background:#111;}
     <div class="btn-group" style="margin-top:4px;">
       <button class="btn btn-secondary btn-sm" onclick="openByesModal('LB')">Leg Bye</button>
       <button class="btn btn-secondary btn-sm" onclick="openByesModal('B')">Bye</button>
+      <button class="btn btn-secondary btn-sm" onclick="openRetiredModal()">🤕 Retired</button>
       <button class="btn btn-secondary btn-sm" onclick="openNewBowlerModal()">Change Bowler</button>
     </div>
   </div>
@@ -425,16 +426,26 @@ select option{background:#111;}
 <div class="modal-overlay" id="wicketModal">
   <div class="modal">
     <div class="modal-title">Wicket!</div>
-    <div class="form-group"><label>Dismissal</label><select id="wicketType" onchange="updateWicketFields()"><option value="Caught">Caught</option><option value="Bowled">Bowled</option><option value="LBW">LBW</option><option value="Run Out">Run Out</option><option value="Stumped">Stumped</option><option value="Hit Wicket">Hit Wicket</option><option value="Caught & Bowled">Caught &amp; Bowled</option><option value="Obstructing Field">Obstructing Field</option></select></div>
-    <div class="form-group" id="caughtByGroup"><label>Fielder</label><select id="caughtBy"></select></div>
-    <div class="form-group" id="runOutGroup" style="display:none;"><label>Batsman Out</label><select id="runOutBatsman"></select></div>
+    <div class="form-group"><label>Who's Out</label><select id="whosOut"></select></div>
     <div class="form-group"><label>Runs on this ball</label><input type="number" id="wicketRuns" value="0" min="0"></div>
-    <div class="form-group" id="newBatsmanGroup">
-      <label>Incoming Batsman</label>
-      <select id="newBatsman"></select>
-      <div id="lastWicketNote" class="alert alert-warning" style="display:none;margin-top:8px;">Last wicket — innings will end.</div>
-    </div>
     <div class="btn-group mt-10"><button class="btn btn-danger" onclick="recordWicket()">Record Wicket</button><button class="btn btn-secondary" onclick="closeModal('wicketModal')">Cancel</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="retiredModal">
+  <div class="modal">
+    <div class="modal-title" style="color:var(--extra);">🤕 Retired Hurt</div>
+    <div class="form-group"><label>Who Retires</label><select id="retiredBatsman"></select></div>
+    <div class="alert alert-info">Not out — stats kept, player can return later.</div>
+    <div class="btn-group mt-10"><button class="btn btn-secondary" onclick="recordRetired()">Record Retirement</button><button class="btn btn-secondary" onclick="closeModal('retiredModal')">Cancel</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="incomingModal">
+  <div class="modal">
+    <div class="modal-title" style="color:var(--green);">Incoming Batsman</div>
+    <div class="form-group"><label>New Batsman</label><select id="incomingBatsman"></select></div>
+    <div class="btn-group mt-10"><button class="btn btn-primary" onclick="confirmIncoming()">Confirm</button></div>
   </div>
 </div>
 
@@ -491,6 +502,7 @@ let localTeams = {A:{players:[]}, B:{players:[]}};
 let unsubMatch = null;
 let byesType = 'LB';
 let playerPool = [];
+let pendingDismissal = null;
 
 // ─── SYNC ───
 function setSyncStatus(s){
@@ -708,7 +720,7 @@ function renderPlayerList(t){
 
 window.goToBatsFirst = async function(){
   if(!S.isAdmin){alert('Admin only!');return;}
-  if(localTeams.A.players.length<2||localTeams.B.players.length<2){alert('Each team needs at least 2 players!');return;}
+  if(localTeams.A.players.length<1||localTeams.B.players.length<1){alert('Each team needs at least 1 player!');return;}
   S.teams.A.name=document.getElementById('teamAName').value.trim()||'Team Alpha';
   S.teams.B.name=document.getElementById('teamBName').value.trim()||'Team Beta';
   S.teams.A.players=[...localTeams.A.players]; S.teams.B.players=[...localTeams.B.players];
@@ -730,10 +742,14 @@ window.selectBattingFirst = function(team){
   document.getElementById('batsFirstB').classList.toggle('selected',team==='B');
   const bt=S.teams[S.battingTeam], bl=S.teams[S.bowlingTeam];
   document.getElementById('batsFirstResult').textContent=`${bt.name} will bat first.`;
-  ['selectStriker','selectNonStriker'].forEach((id,i)=>{
-    document.getElementById(id).innerHTML=bt.players.map((p,j)=>`<option value="${j}">${pname(p)}</option>`).join('');
-    if(i===1) document.getElementById(id).selectedIndex=Math.min(1,bt.players.length-1);
-  });
+  const stOpts=bt.players.map((p,j)=>`<option value="${j}">${pname(p)}</option>`).join('');
+  document.getElementById('selectStriker').innerHTML=stOpts;
+  if(bt.players.length<2){
+    document.getElementById('selectNonStriker').innerHTML='<option value="-1">— (batting alone)</option>';
+  } else {
+    document.getElementById('selectNonStriker').innerHTML=stOpts;
+    document.getElementById('selectNonStriker').selectedIndex=1;
+  }
   document.getElementById('selectBowler').innerHTML=bl.players.map((p,i)=>`<option value="${i}">${pname(p)}</option>`).join('');
   document.getElementById('batsFirstStartCard').style.display='';
 }
@@ -743,11 +759,11 @@ window.startMatch = async function(){
   const sI=parseInt(document.getElementById('selectStriker').value);
   const nsI=parseInt(document.getElementById('selectNonStriker').value);
   const bI=parseInt(document.getElementById('selectBowler').value);
-  if(sI===nsI){alert('Striker and Non-Striker must be different!');return;}
+  if(nsI>=0&&sI===nsI){alert('Striker and Non-Striker must be different!');return;}
   S.innings=1; S.innings1=createInn(S.battingTeam,S.bowlingTeam); S.currentInnings=S.innings1;
   const inn=S.currentInnings;
   inn.strikerIdx=sI; inn.nonStrikerIdx=nsI; inn.currentBowlerIdx=bI;
-  inn.batsmen[sI].status='batting'; inn.batsmen[nsI].status='batting';
+  inn.batsmen[sI].status='batting'; if(nsI>=0) inn.batsmen[nsI].status='batting';
   setupScoringPage(); await saveDB(); showPage('pageScoring'); renderScoring();
 }
 
@@ -823,59 +839,98 @@ window.recordByes = async function(){
 
 window.openWicketModal = function(){
   if(!S.isAdmin) return;
-  const inn=S.currentInnings, ft=S.teams[inn.bowlingTeamId];
-  document.getElementById('caughtBy').innerHTML=ft.players.map(p=>`<option value="${pname(p)}">${pname(p)}</option>`).join('');
-  document.getElementById('runOutBatsman').innerHTML=`<option value="${inn.strikerIdx}">${inn.batsmen[inn.strikerIdx].name} (Striker)</option><option value="${inn.nonStrikerIdx}">${inn.batsmen[inn.nonStrikerIdx].name} (Non-Striker)</option>`;
-  const avail=inn.batsmen.filter(b=>b.status==='yet to bat');
-  const sel=document.getElementById('newBatsman');
-  if(avail.length===0){sel.innerHTML='<option value="-1">No more batsmen</option>';document.getElementById('lastWicketNote').style.display='';}
-  else{sel.innerHTML=avail.map(b=>`<option value="${inn.batsmen.indexOf(b)}">${b.name}</option>`).join('');document.getElementById('lastWicketNote').style.display='none';}
-  document.getElementById('wicketRuns').value='0'; updateWicketFields(); openModal('wicketModal');
+  const inn=S.currentInnings;
+  let whosOutOpts=`<option value="${inn.strikerIdx}">${inn.batsmen[inn.strikerIdx].name} (Striker)</option>`;
+  if(inn.nonStrikerIdx>=0) whosOutOpts+=`<option value="${inn.nonStrikerIdx}">${inn.batsmen[inn.nonStrikerIdx].name} (Non-Striker)</option>`;
+  document.getElementById('whosOut').innerHTML=whosOutOpts;
+  document.getElementById('wicketRuns').value='0';
+  openModal('wicketModal');
 }
 
-window.updateWicketFields = function(){
-  const t=document.getElementById('wicketType').value;
-  const isCB=t==='Caught & Bowled';
-  document.getElementById('caughtByGroup').style.display=['Caught','Stumped'].includes(t)||isCB?'':'none';
-  document.getElementById('runOutGroup').style.display=t==='Run Out'?'':'none';
-  if(isCB){const bn=S.currentInnings.bowlers[S.currentInnings.currentBowlerIdx].name;document.getElementById('caughtBy').innerHTML=`<option value="${bn}">${bn}</option>`;}
-}
-
+// Stage 1 — record the wicket. Incoming batsman is picked in stage 2 (incoming modal).
 window.recordWicket = async function(){
   if(!S.isAdmin) return;
-  saveSnap();
-  const inn=S.currentInnings, t=document.getElementById('wicketType').value;
+  const inn=S.currentInnings;
+  const outIdx=parseInt(document.getElementById('whosOut').value);
   const runs=parseInt(document.getElementById('wicketRuns').value)||0;
   const bw=inn.bowlers[inn.currentBowlerIdx];
-  let outIdx=inn.strikerIdx;
-  if(t==='Run Out') outIdx=parseInt(document.getElementById('runOutBatsman').value);
+  saveSnap();
   const ob=inn.batsmen[outIdx];
-  let dis=t;
-  if(t==='Caught')dis=`c ${document.getElementById('caughtBy').value} b ${bw.name}`;
-  else if(t==='Caught & Bowled')dis=`c & b ${bw.name}`;
-  else if(t==='Bowled')dis=`b ${bw.name}`;
-  else if(t==='LBW')dis=`lbw b ${bw.name}`;
-  else if(t==='Stumped')dis=`st ${document.getElementById('caughtBy').value} b ${bw.name}`;
-  else if(t==='Hit Wicket')dis=`hit wicket b ${bw.name}`;
-  ob.status='dismissed'; ob.dismissal=dis;
-  if(!['Run Out','Obstructing Field'].includes(t)) bw.wickets++;
-  if(outIdx===inn.strikerIdx) inn.batsmen[inn.strikerIdx].balls+=1;
+  ob.status='dismissed'; ob.dismissal='out';
+  if(outIdx===inn.strikerIdx){ bw.wickets++; ob.balls+=1; }   // striker out → bowler's wicket; non-striker out → run-out (no credit)
   inn.runs+=runs; inn.balls+=1; bw.balls+=1; bw.runs+=runs; inn.currentOverRunsTemp+=runs; inn.wickets++;
   const bs=`${Math.floor(inn.balls/6)}.${inn.balls%6}`;
-  inn.fallOfWickets.push({score:inn.runs,wicket:inn.wickets,batsman:ob.name,ball:bs,dismissal:dis});
+  inn.fallOfWickets.push({score:inn.runs,wicket:inn.wickets,batsman:ob.name,ball:bs,dismissal:'out'});
   inn.currentOverBalls.push({type:'W',runs,wicket:true});
-  inn.lastBall={desc:`WICKET — ${ob.name} (${dis})`,runs,wicket:true};
-  const avail=inn.batsmen.filter(b=>b.status==='yet to bat');
-  if(avail.length>0){
-    const nbi=parseInt(document.getElementById('newBatsman').value);
-    if(nbi>=0){
-      inn.batsmen[nbi].status='batting';
-      if(outIdx===inn.strikerIdx){if(runs%2!==0){inn.strikerIdx=inn.nonStrikerIdx;inn.nonStrikerIdx=nbi;}else inn.strikerIdx=nbi;}
-      else{if(runs%2!==0){inn.nonStrikerIdx=inn.strikerIdx;inn.strikerIdx=nbi;}else inn.nonStrikerIdx=nbi;}
+  inn.lastBall={desc:`WICKET — ${ob.name}`,runs,wicket:true};
+  closeModal('wicketModal');
+  const avail=inn.batsmen.filter(b=>b.status==='yet to bat'||b.status==='retired');
+  if(avail.length===0){                                       // no replacement — lone survivor bats on (last man standing)
+    const survivors=inn.batsmen.map((b,i)=>({b,i})).filter(x=>x.b.status==='batting').map(x=>x.i);
+    if(survivors.length===1){ inn.strikerIdx=survivors[0]; inn.nonStrikerIdx=-1; }
+    checkOver(); await checkInnEnd();                          // ends only at all-out (wickets>=N) or overs up
+    if(!S.matchOver){ await saveDB(); renderScoring(); }
+    return;
+  }
+  pendingDismissal={kind:'wicket',outIdx,runs};
+  openIncomingModal(avail);
+}
+
+// Retired hurt — direct action. NOT a wicket: no count, no bowler credit, no ball/FOW. Stats kept; can return.
+window.openRetiredModal = function(){
+  if(!S.isAdmin) return;
+  const inn=S.currentInnings;
+  let retOpts=`<option value="${inn.strikerIdx}">${inn.batsmen[inn.strikerIdx].name} (Striker)</option>`;
+  if(inn.nonStrikerIdx>=0) retOpts+=`<option value="${inn.nonStrikerIdx}">${inn.batsmen[inn.nonStrikerIdx].name} (Non-Striker)</option>`;
+  document.getElementById('retiredBatsman').innerHTML=retOpts;
+  openModal('retiredModal');
+}
+window.recordRetired = async function(){
+  if(!S.isAdmin) return;
+  const inn=S.currentInnings;
+  const rIdx=parseInt(document.getElementById('retiredBatsman').value);
+  const avail=inn.batsmen.filter(b=>(b.status==='yet to bat'||b.status==='retired')&&inn.batsmen.indexOf(b)!==rIdx);
+  const otherBatting=inn.batsmen.map((b,i)=>({b,i})).filter(x=>x.b.status==='batting'&&x.i!==rIdx).map(x=>x.i);
+  if(avail.length===0&&otherBatting.length===0){ alert('No replacement batsman available.'); return; }
+  saveSnap();
+  const rb=inn.batsmen[rIdx];
+  rb.status='retired'; rb.dismissal='retired hurt';
+  inn.lastBall={desc:`RETIRED HURT — ${rb.name}`,runs:0};
+  closeModal('retiredModal');
+  if(avail.length>0){                                          // a replacement exists → bring one in (stage 2)
+    pendingDismissal={kind:'retired',outIdx:rIdx,runs:0};
+    openIncomingModal(avail);
+    return;
+  }
+  inn.strikerIdx=otherBatting[0]; inn.nonStrikerIdx=-1;        // no replacement, but a partner remains → bats on alone
+  await saveDB(); renderScoring();
+}
+
+// Stage 2 — pick the incoming batsman (shared by wicket + retired).
+function openIncomingModal(avail){
+  const inn=S.currentInnings;
+  document.getElementById('incomingBatsman').innerHTML=avail.map(b=>`<option value="${inn.batsmen.indexOf(b)}">${b.name}${b.status==='retired'?' (retired)':''}</option>`).join('');
+  openModal('incomingModal');
+}
+window.confirmIncoming = async function(){
+  if(!S.isAdmin||!pendingDismissal) return;
+  const inn=S.currentInnings;
+  const nbi=parseInt(document.getElementById('incomingBatsman').value);
+  const {kind,outIdx,runs}=pendingDismissal;
+  if(nbi>=0&&nbi!==outIdx){
+    inn.batsmen[nbi].status='batting';
+    if(kind==='retired'){
+      if(outIdx===inn.strikerIdx) inn.strikerIdx=nbi; else inn.nonStrikerIdx=nbi;
+    }else{
+      if(inn.nonStrikerIdx<0){ inn.strikerIdx=nbi; }   // out batter was batting alone → incoming is the new lone batsman
+      else if(outIdx===inn.strikerIdx){ if(runs%2!==0){inn.strikerIdx=inn.nonStrikerIdx;inn.nonStrikerIdx=nbi;} else inn.strikerIdx=nbi; }
+      else{ if(runs%2!==0){inn.nonStrikerIdx=inn.strikerIdx;inn.strikerIdx=nbi;} else inn.nonStrikerIdx=nbi; }
     }
   }
-  closeModal('wicketModal'); checkOver(); await checkInnEnd();
-  if(!S.matchOver){await saveDB(); renderScoring();}
+  pendingDismissal=null;
+  closeModal('incomingModal');
+  if(kind==='wicket'){ checkOver(); await checkInnEnd(); }
+  if(!S.matchOver){ await saveDB(); renderScoring(); }
 }
 
 window.openNewBowlerModal = function(){
@@ -888,7 +943,7 @@ window.openNewBowlerModal = function(){
 window.confirmNewBowler = async function(){
   const idx=parseInt(document.getElementById('newBowlerSelect').value);
   const inn=S.currentInnings;
-  if(inn.overHistory.length>0&&inn.overHistory[inn.overHistory.length-1].bowlerIdx===idx){
+  if(inn.bowlers.length>1&&inn.overHistory.length>0&&inn.overHistory[inn.overHistory.length-1].bowlerIdx===idx){
     document.getElementById('bowlerWarn').style.display='';
     document.getElementById('bowlerWarn').textContent='Cannot bowl consecutive overs!';
     return;
@@ -978,7 +1033,7 @@ function renderBatTable(){
     const sr=b.balls>0?((b.runs/b.balls)*100).toFixed(1):'0.0';
     const isS=i===inn.strikerIdx, isNS=i===inn.nonStrikerIdx;
     let cls=b.status==='batting'?'batting-now':b.status==='dismissed'?'dismissed':'';
-    return `<tr class="${cls}"><td><span class="fw700">${b.name}</span>${isS?'<span class="strike-ind">●</span>':''}${isNS?'<span class="strike-ind" style="background:var(--text-dim);color:#000">○</span>':''}${b.status==='dismissed'?`<div class="dismissal-text">${b.dismissal}</div>`:''}${b.status==='yet to bat'?'<div class="dismissal-text color-dim">Yet to bat</div>':''}</td><td class="fw700 ${b.runs>=50?'color-gold':''}">${b.runs}</td><td class="font-mono">${b.balls}</td><td class="color-green">${b.fours}</td><td class="color-gold">${b.sixes}</td><td class="color-dim font-mono">${sr}</td></tr>`;
+    return `<tr class="${cls}"><td><span class="fw700">${b.name}</span>${isS?'<span class="strike-ind">●</span>':''}${isNS?'<span class="strike-ind" style="background:var(--text-dim);color:#000">○</span>':''}${b.status==='dismissed'?`<div class="dismissal-text">${b.dismissal}</div>`:''}${b.status==='retired'?'<div class="dismissal-text color-dim">retired hurt</div>':''}${b.status==='yet to bat'?'<div class="dismissal-text color-dim">Yet to bat</div>':''}</td><td class="fw700 ${b.runs>=50?'color-gold':''}">${b.runs}</td><td class="font-mono">${b.balls}</td><td class="color-green">${b.fours}</td><td class="color-gold">${b.sixes}</td><td class="color-dim font-mono">${sr}</td></tr>`;
   }).join('');
   const ext=inn.extras, extT=ext.nb+ext.wd+ext.lb+ext.b;
   document.getElementById('battingExtrasRow').innerHTML=`<tr><td colspan="2" class="color-dim" style="font-size:11px;">Extras (NB ${ext.nb}, WD ${ext.wd}, LB ${ext.lb}, B ${ext.b})</td><td colspan="4" class="fw700">${extT}</td></tr><tr style="border-top:1px solid var(--green-dark);"><td class="fw700 color-green">TOTAL</td><td colspan="2" class="fw700 color-green">${inn.runs}/${inn.wickets}</td><td colspan="3" class="color-dim font-mono">${getOvStr(inn.balls)} ov</td></tr>`;
@@ -1010,10 +1065,14 @@ function renderBreakPage(){
   const i1=S.innings1;
   document.getElementById('inningsBreakInfo').innerHTML=`<div class="alert alert-info"><strong>${S.teams[i1.battingTeamId].name}</strong> scored <strong>${i1.runs}/${i1.wickets}</strong> in ${getOvStr(i1.balls)} overs.<br>${S.teams[i1.bowlingTeamId].name} needs <strong>${i1.runs+1} runs</strong> to win.</div>`;
   const bt2=S.teams[i1.bowlingTeamId], bl2=S.teams[i1.battingTeamId];
-  ['selectStriker2','selectNonStriker2'].forEach((id,i)=>{
-    document.getElementById(id).innerHTML=bt2.players.map((p,j)=>`<option value="${j}">${pname(p)}</option>`).join('');
-    if(i===1) document.getElementById(id).selectedIndex=Math.min(1,bt2.players.length-1);
-  });
+  const st2Opts=bt2.players.map((p,j)=>`<option value="${j}">${pname(p)}</option>`).join('');
+  document.getElementById('selectStriker2').innerHTML=st2Opts;
+  if(bt2.players.length<2){
+    document.getElementById('selectNonStriker2').innerHTML='<option value="-1">— (batting alone)</option>';
+  } else {
+    document.getElementById('selectNonStriker2').innerHTML=st2Opts;
+    document.getElementById('selectNonStriker2').selectedIndex=1;
+  }
   document.getElementById('selectBowler2').innerHTML=bl2.players.map((p,i)=>`<option value="${i}">${pname(p)}</option>`).join('');
 }
 
@@ -1022,12 +1081,12 @@ window.startSecondInnings = async function(){
   const sI=parseInt(document.getElementById('selectStriker2').value);
   const nsI=parseInt(document.getElementById('selectNonStriker2').value);
   const bI=parseInt(document.getElementById('selectBowler2').value);
-  if(sI===nsI){alert('Must be different players!');return;}
+  if(nsI>=0&&sI===nsI){alert('Must be different players!');return;}
   S.innings2=createInn(S.innings1.bowlingTeamId,S.innings1.battingTeamId);
   S.currentInnings=S.innings2; S.innings=2;
   const inn=S.currentInnings;
   inn.strikerIdx=sI; inn.nonStrikerIdx=nsI; inn.currentBowlerIdx=bI;
-  inn.batsmen[sI].status='batting'; inn.batsmen[nsI].status='batting';
+  inn.batsmen[sI].status='batting'; if(nsI>=0) inn.batsmen[nsI].status='batting';
   setupScoringPage(); await saveDB(); showPage('pageScoring'); renderScoring();
 }
 
@@ -1061,7 +1120,7 @@ window.showPage = function(id){document.querySelectorAll('.page').forEach(p=>p.c
 window.openModal = function(id){document.getElementById(id).classList.add('open');}
 window.closeModal = function(id){document.getElementById(id).classList.remove('open');}
 window.showTab = function(id,btn){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));document.getElementById(id).classList.add('active');if(btn)btn.classList.add('active');}
-document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m&&m.id!=='incomingModal')m.classList.remove('open');}));
 
 // ─── INIT ───
 async function init(){
