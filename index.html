@@ -227,13 +227,28 @@ select option{background:#111;}
   </div>
   <div id="adminCreateBtn" style="display:none;">
     <button class="btn btn-primary" style="width:100%;padding:13px;" onclick="showPage('pageSetup')">+ CREATE NEW MATCH</button>
+    <button class="btn btn-secondary" style="width:100%;padding:11px;margin-top:8px;" onclick="showPlayersPage()">⚙ MANAGE PLAYERS</button>
   </div>
   <div id="guestHint" style="display:none;" class="alert alert-info mt-10">👁 Guest mode — tap any match to view live scorecard.</div>
+</div>
+
+<!-- PAGE: PLAYERS -->
+<div class="page" id="pagePlayers">
+  <div class="card">
+    <div class="card-title">🏏 Player Pool <span style="margin-left:auto;font-family:'Rajdhani';font-size:13px;color:var(--text-dim);">(<span id="poolCount">0</span>)</span></div>
+    <div class="form-row">
+      <div class="form-group"><label>New Player</label><input type="text" id="poolPlayerInput" placeholder="Player name" autocomplete="off"></div>
+      <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-primary" onclick="addPoolPlayer()" style="width:100%">+ Add</button></div>
+    </div>
+    <div class="player-list" id="poolList"></div>
+  </div>
+  <button class="btn btn-secondary" onclick="goHome()">Back</button>
 </div>
 
 <!-- PAGE: SETUP -->
 <div class="page" id="pageSetup">
   <div class="steps"><div class="step-dot current"></div><div class="step-dot"></div><div class="step-dot"></div></div>
+  <datalist id="playerPoolList"></datalist>
   <div class="card">
     <div class="card-title">Match Settings</div>
     <div class="form-row">
@@ -245,18 +260,20 @@ select option{background:#111;}
     <div class="card-title">Team A</div>
     <div class="form-group"><label>Team Name</label><input type="text" id="teamAName" value="Team Alpha"></div>
     <div class="form-row">
-      <div class="form-group"><label>Player</label><input type="text" id="playerAInput" placeholder="Player name"></div>
+      <div class="form-group"><label>Player</label><input type="text" id="playerAInput" list="playerPoolList" placeholder="Type or pick from pool" autocomplete="off"></div>
       <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-secondary" onclick="addPlayer('A')" style="width:100%">+ Add</button></div>
     </div>
+    <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12px;cursor:pointer;margin-bottom:8px;"><input type="checkbox" id="jokerCheckA" style="width:auto;"> 🃏 Joker (adds to both teams)</label>
     <div class="player-list" id="playerListA"></div>
   </div>
   <div class="card">
     <div class="card-title">Team B</div>
     <div class="form-group"><label>Team Name</label><input type="text" id="teamBName" value="Team Beta"></div>
     <div class="form-row">
-      <div class="form-group"><label>Player</label><input type="text" id="playerBInput" placeholder="Player name"></div>
+      <div class="form-group"><label>Player</label><input type="text" id="playerBInput" list="playerPoolList" placeholder="Type or pick from pool" autocomplete="off"></div>
       <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-secondary" onclick="addPlayer('B')" style="width:100%">+ Add</button></div>
     </div>
+    <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:12px;cursor:pointer;margin-bottom:8px;"><input type="checkbox" id="jokerCheckB" style="width:auto;"> 🃏 Joker (adds to both teams)</label>
     <div class="player-list" id="playerListB"></div>
   </div>
   <div class="btn-group">
@@ -441,7 +458,7 @@ select option{background:#111;}
 <!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, orderBy, where, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDUH_2AKIMwAU-ai6IcH64JwXGB3SjId0w",
@@ -473,6 +490,7 @@ let S = {
 let localTeams = {A:{players:[]}, B:{players:[]}};
 let unsubMatch = null;
 let byesType = 'LB';
+let playerPool = [];
 
 // ─── SYNC ───
 function setSyncStatus(s){
@@ -606,19 +624,86 @@ function setupScoringPage(){
   }
 }
 
+// ─── PLAYER POOL ───
+function genPlayerId(){ return 'p_'+Math.random().toString(36).slice(2,8); }
+function pname(p){ return typeof p==='string'?p:((p&&p.name)||''); }
+function pid(p){ return typeof p==='string'?null:((p&&p.id)||null); }
+function loadPlayerPool(){
+  onSnapshot(query(collection(db,'players'),orderBy('name')), snap=>{
+    playerPool=snap.docs.map(d=>({id:d.id,name:d.data().name}));
+    renderPoolDatalist(); renderPoolManageList();
+  }, e=>console.error(e));
+}
+function renderPoolDatalist(){
+  const dl=document.getElementById('playerPoolList');
+  if(dl) dl.innerHTML=playerPool.map(p=>`<option value="${p.name}"></option>`).join('');
+}
+// Find a pool player by name (case-insensitive); mint + persist a new one if absent.
+function resolvePoolPlayer(name){
+  const ex=playerPool.find(p=>p.name.toLowerCase()===name.toLowerCase());
+  if(ex) return ex;
+  const np={id:genPlayerId(),name};
+  playerPool.push(np);
+  setDoc(doc(db,'players',np.id),{name,createdAt:Date.now(),lastUsedAt:Date.now()}).catch(e=>console.error(e));
+  renderPoolDatalist(); renderPoolManageList();
+  return np;
+}
+
+// ─── PLAYER POOL — MANAGE SCREEN ───
+function renderPoolManageList(){
+  const c=document.getElementById('poolCount'); if(c) c.textContent=playerPool.length;
+  const el=document.getElementById('poolList'); if(!el) return;
+  el.innerHTML=playerPool.length
+    ? playerPool.map(p=>`<div class="player-item"><span class="player-name">${p.name}</span><button class="btn btn-secondary btn-xs" onclick="deletePoolPlayer('${p.id}')">X</button></div>`).join('')
+    : '<div class="color-dim text-center" style="padding:14px;">No players yet. Add one above.</div>';
+}
+window.showPlayersPage = function(){
+  if(!S.isAdmin){alert('Admin only!');return;}
+  renderPoolManageList(); showPage('pagePlayers');
+}
+window.addPoolPlayer = function(){
+  if(!S.isAdmin){alert('Admin only!');return;}
+  const inp=document.getElementById('poolPlayerInput');
+  const name=inp.value.trim(); if(!name) return;
+  if(playerPool.some(p=>p.name.toLowerCase()===name.toLowerCase())){alert('Player already in pool!');inp.select();return;}
+  resolvePoolPlayer(name); inp.value=''; inp.focus();
+}
+document.getElementById('poolPlayerInput').addEventListener('keydown',e=>{if(e.key==='Enter')addPoolPlayer();});
+window.deletePoolPlayer = async function(id){
+  if(!S.isAdmin){alert('Admin only!');return;}
+  const p=playerPool.find(x=>x.id===id);
+  if(!confirm(`Remove ${p?p.name:'this player'} from the pool?\n(existing matches keep their players)`)) return;
+  try{ await deleteDoc(doc(db,'players',id)); }catch(e){ console.error(e); alert('Delete failed'); }
+}
+
 // ─── SETUP ───
 window.addPlayer = function(t){
   const inp=document.getElementById(`player${t}Input`);
-  const n=inp.value.trim(); if(!n) return;
-  if(localTeams[t].players.includes(n)){alert('Already added!');return;}
-  localTeams[t].players.push(n); renderPlayerList(t); inp.value=''; inp.focus();
+  const name=inp.value.trim(); if(!name) return;
+  const joker=document.getElementById(`jokerCheck${t}`).checked;
+  const player=resolvePoolPlayer(name);
+  const targets=joker?['A','B']:[t];
+  for(const tt of targets){
+    if(localTeams[tt].players.some(p=>p.id===player.id)){ if(!joker) alert('Already added!'); continue; }
+    localTeams[tt].players.push({id:player.id,name:player.name,isJoker:joker});
+    renderPlayerList(tt);
+  }
+  inp.value=''; document.getElementById(`jokerCheck${t}`).checked=false; inp.focus();
 }
 document.getElementById('playerAInput').addEventListener('keydown',e=>{if(e.key==='Enter')addPlayer('A');});
 document.getElementById('playerBInput').addEventListener('keydown',e=>{if(e.key==='Enter')addPlayer('B');});
-window.removePlayer = function(t,i){ localTeams[t].players.splice(i,1); renderPlayerList(t); }
+window.removePlayer = function(t,i){
+  const removed=localTeams[t].players[i];
+  localTeams[t].players.splice(i,1); renderPlayerList(t);
+  if(removed&&removed.isJoker){                              // a joker lives in both teams — pull it from the other too
+    const ot=t==='A'?'B':'A';
+    const oi=localTeams[ot].players.findIndex(p=>p.id===removed.id);
+    if(oi>=0){ localTeams[ot].players.splice(oi,1); renderPlayerList(ot); }
+  }
+}
 function renderPlayerList(t){
   document.getElementById(`playerList${t}`).innerHTML=localTeams[t].players.map((p,i)=>
-    `<div class="player-item"><span class="player-num">#${i+1}</span><span class="player-name">${p}</span><button class="btn btn-secondary btn-xs" onclick="removePlayer('${t}',${i})">X</button></div>`).join('');
+    `<div class="player-item"><span class="player-num">#${i+1}</span><span class="player-name">${p.name}${p.isJoker?' <span style="color:var(--gold);font-size:11px;">🃏 J</span>':''}</span><button class="btn btn-secondary btn-xs" onclick="removePlayer('${t}',${i})">X</button></div>`).join('');
 }
 
 window.goToBatsFirst = async function(){
@@ -646,10 +731,10 @@ window.selectBattingFirst = function(team){
   const bt=S.teams[S.battingTeam], bl=S.teams[S.bowlingTeam];
   document.getElementById('batsFirstResult').textContent=`${bt.name} will bat first.`;
   ['selectStriker','selectNonStriker'].forEach((id,i)=>{
-    document.getElementById(id).innerHTML=bt.players.map((p,j)=>`<option value="${j}">${p}</option>`).join('');
+    document.getElementById(id).innerHTML=bt.players.map((p,j)=>`<option value="${j}">${pname(p)}</option>`).join('');
     if(i===1) document.getElementById(id).selectedIndex=Math.min(1,bt.players.length-1);
   });
-  document.getElementById('selectBowler').innerHTML=bl.players.map((p,i)=>`<option value="${i}">${p}</option>`).join('');
+  document.getElementById('selectBowler').innerHTML=bl.players.map((p,i)=>`<option value="${i}">${pname(p)}</option>`).join('');
   document.getElementById('batsFirstStartCard').style.display='';
 }
 
@@ -670,8 +755,8 @@ function createInn(btId,blId){
   const bt=S.teams[btId], bl=S.teams[blId];
   return{battingTeamId:btId,bowlingTeamId:blId,runs:0,wickets:0,balls:0,
     extras:{nb:0,wd:0,lb:0,b:0},
-    batsmen:bt.players.map((p,i)=>({name:p,runs:0,balls:0,fours:0,sixes:0,status:i<2?'waiting':'yet to bat',dismissal:''})),
-    bowlers:bl.players.map(p=>({name:p,balls:0,runs:0,wickets:0,nb:0,wd:0,maidens:0})),
+    batsmen:bt.players.map((p,i)=>({id:pid(p)||genPlayerId(),name:pname(p),isJoker:!!(p&&p.isJoker),runs:0,balls:0,fours:0,sixes:0,status:i<2?'waiting':'yet to bat',dismissal:''})),
+    bowlers:bl.players.map(p=>({id:pid(p)||genPlayerId(),name:pname(p),balls:0,runs:0,wickets:0,nb:0,wd:0,maidens:0})),
     strikerIdx:-1,nonStrikerIdx:-1,currentBowlerIdx:-1,
     currentOverBalls:[],overHistory:[],fallOfWickets:[],
     currentOverRunsTemp:0,lastBall:null,stateHistory:[]};
@@ -739,7 +824,7 @@ window.recordByes = async function(){
 window.openWicketModal = function(){
   if(!S.isAdmin) return;
   const inn=S.currentInnings, ft=S.teams[inn.bowlingTeamId];
-  document.getElementById('caughtBy').innerHTML=ft.players.map(p=>`<option value="${p}">${p}</option>`).join('');
+  document.getElementById('caughtBy').innerHTML=ft.players.map(p=>`<option value="${pname(p)}">${pname(p)}</option>`).join('');
   document.getElementById('runOutBatsman').innerHTML=`<option value="${inn.strikerIdx}">${inn.batsmen[inn.strikerIdx].name} (Striker)</option><option value="${inn.nonStrikerIdx}">${inn.batsmen[inn.nonStrikerIdx].name} (Non-Striker)</option>`;
   const avail=inn.batsmen.filter(b=>b.status==='yet to bat');
   const sel=document.getElementById('newBatsman');
@@ -926,10 +1011,10 @@ function renderBreakPage(){
   document.getElementById('inningsBreakInfo').innerHTML=`<div class="alert alert-info"><strong>${S.teams[i1.battingTeamId].name}</strong> scored <strong>${i1.runs}/${i1.wickets}</strong> in ${getOvStr(i1.balls)} overs.<br>${S.teams[i1.bowlingTeamId].name} needs <strong>${i1.runs+1} runs</strong> to win.</div>`;
   const bt2=S.teams[i1.bowlingTeamId], bl2=S.teams[i1.battingTeamId];
   ['selectStriker2','selectNonStriker2'].forEach((id,i)=>{
-    document.getElementById(id).innerHTML=bt2.players.map((p,j)=>`<option value="${j}">${p}</option>`).join('');
+    document.getElementById(id).innerHTML=bt2.players.map((p,j)=>`<option value="${j}">${pname(p)}</option>`).join('');
     if(i===1) document.getElementById(id).selectedIndex=Math.min(1,bt2.players.length-1);
   });
-  document.getElementById('selectBowler2').innerHTML=bl2.players.map((p,i)=>`<option value="${i}">${p}</option>`).join('');
+  document.getElementById('selectBowler2').innerHTML=bl2.players.map((p,i)=>`<option value="${i}">${pname(p)}</option>`).join('');
 }
 
 window.startSecondInnings = async function(){
@@ -983,6 +1068,7 @@ async function init(){
   setSyncStatus('connecting');
   try{ await getDoc(doc(db,'matches','__ping__')); }catch(e){}
   setSyncStatus('live');
+  loadPlayerPool();
   // Check session
   const role=sessionStorage.getItem('csRole');
   if(role==='admin'){ S.isAdmin=true; applyRole(); goHome(); }
