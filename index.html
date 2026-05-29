@@ -145,10 +145,10 @@ select option{background:#111;}
 .over-balls{display:flex;gap:3px;flex-wrap:wrap;}
 .over-ball-mini{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;}
 .over-runs{font-family:'Share Tech Mono',monospace;color:var(--text-dim);margin-left:auto;font-size:11px;}
-.toss-options{display:flex;gap:10px;flex-wrap:wrap;}
-.toss-card{flex:1;min-width:120px;background:var(--surface2);border:2px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;text-align:center;transition:all 0.15s;font-weight:700;font-size:14px;}
-.toss-card:hover,.toss-card.selected{border-color:var(--green);background:var(--green-dim);color:var(--green);}
-.toss-icon{font-size:26px;margin-bottom:5px;display:block;}
+.bf-options{display:flex;gap:10px;flex-wrap:wrap;}
+.bf-card{flex:1;min-width:120px;background:var(--surface2);border:2px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;text-align:center;transition:all 0.15s;font-weight:700;font-size:14px;}
+.bf-card:hover,.bf-card.selected{border-color:var(--green);background:var(--green-dim);color:var(--green);}
+.bf-icon{font-size:26px;margin-bottom:5px;display:block;}
 .result-banner{text-align:center;padding:28px 18px;background:linear-gradient(135deg,#0d2918,#0a1a0f);border:1px solid var(--green-dark);border-radius:14px;margin-bottom:16px;}
 .result-trophy{font-size:48px;margin-bottom:8px;}
 .result-title{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:3px;color:var(--gold);text-shadow:0 0 30px rgba(255,214,0,0.4);}
@@ -261,26 +261,23 @@ select option{background:#111;}
   </div>
   <div class="btn-group">
     <button class="btn btn-secondary" onclick="goHome()">Back</button>
-    <button class="btn btn-primary" onclick="goToToss()" style="flex:1;padding:13px;">PROCEED TO TOSS</button>
+    <button class="btn btn-primary" onclick="goToBatsFirst()" style="flex:1;padding:13px;">PROCEED</button>
   </div>
 </div>
 
-<!-- PAGE: TOSS -->
-<div class="page" id="pageToss">
+<!-- PAGE: BATS FIRST -->
+<div class="page" id="pageBatsFirst">
   <div class="steps"><div class="step-dot done"></div><div class="step-dot current"></div><div class="step-dot"></div></div>
   <div class="card">
-    <div class="card-title">Toss</div>
-    <div class="form-group"><label>Toss Won By</label><select id="tossWinner"><option value="">Select...</option></select></div>
-    <div class="form-group"><label>Chose To</label>
-      <div class="toss-options">
-        <div class="toss-card" id="tossBat" onclick="selectTossDecision('bat')"><span class="toss-icon">🏏</span>BAT FIRST</div>
-        <div class="toss-card" id="tossBowl" onclick="selectTossDecision('bowl')"><span class="toss-icon">🎯</span>BOWL FIRST</div>
-      </div>
+    <div class="card-title">Who Bats First?</div>
+    <div class="bf-options">
+      <div class="bf-card" id="batsFirstA" onclick="selectBattingFirst('A')"><span class="bf-icon">🏏</span><span id="batsFirstAName">Team A</span></div>
+      <div class="bf-card" id="batsFirstB" onclick="selectBattingFirst('B')"><span class="bf-icon">🏏</span><span id="batsFirstBName">Team B</span></div>
     </div>
   </div>
-  <div class="card" id="tossStartCard" style="display:none;">
+  <div class="card" id="batsFirstStartCard" style="display:none;">
     <div class="card-title">Start Innings 1</div>
-    <div id="tossResult" class="alert alert-success mb-10"></div>
+    <div id="batsFirstResult" class="alert alert-success mb-10"></div>
     <div class="form-group"><label>Opener 1 (Striker)</label><select id="selectStriker"></select></div>
     <div class="form-group"><label>Opener 2 (Non-Striker)</label><select id="selectNonStriker"></select></div>
     <div class="form-group"><label>Opening Bowler</label><select id="selectBowler"></select></div>
@@ -444,7 +441,7 @@ select option{background:#111;}
 <!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDUH_2AKIMwAU-ai6IcH64JwXGB3SjId0w",
@@ -460,18 +457,21 @@ const ADMIN_USER = "admin";
 const ADMIN_PASS = "admin@123";
 // ─────────────────────────────────────────────────
 
+// ─── HOME SCREEN ───
+const MATCH_LIST_DAYS = 14;  // home screen shows matches updated within the last N days (tweak here)
+// ───────────────────
+
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 
 let S = {
   matchId:null, isAdmin:false, matchName:'', totalOvers:10,
   teams:{A:{name:'',players:[]},B:{name:'',players:[]}},
-  tossWinner:'', tossDecision:'', battingTeam:'', bowlingTeam:'',
+  battingTeam:'', bowlingTeam:'',
   innings:1, innings1:null, innings2:null, currentInnings:null, matchOver:false
 };
 let localTeams = {A:{players:[]}, B:{players:[]}};
 let unsubMatch = null;
-let tossDecisionLocal = '';
 let byesType = 'LB';
 
 // ─── SYNC ───
@@ -490,7 +490,6 @@ async function saveDB(){
 }
 function loadFromDoc(data){
   S.matchName=data.matchName; S.totalOvers=data.totalOvers; S.teams=data.teams;
-  S.tossWinner=data.tossWinner||''; S.tossDecision=data.tossDecision||'';
   S.battingTeam=data.battingTeam||''; S.bowlingTeam=data.bowlingTeam||'';
   S.innings=data.innings||1; S.innings1=data.innings1||null;
   S.innings2=data.innings2||null; S.matchOver=data.matchOver||false;
@@ -552,7 +551,8 @@ window.goHome = function(){
 
 window.loadMatches = function(){
   try{
-    const q=query(collection(db,'matches'),orderBy('updatedAt','desc'));
+    const cutoff=Date.now()-MATCH_LIST_DAYS*24*60*60*1000;
+    const q=query(collection(db,'matches'),where('updatedAt','>=',cutoff),orderBy('updatedAt','desc'));
     onSnapshot(q, snap=>{
       const el=document.getElementById('matchList');
       if(snap.empty){el.innerHTML='<div class="color-dim text-center" style="padding:20px;">No matches yet.</div>';return;}
@@ -621,7 +621,7 @@ function renderPlayerList(t){
     `<div class="player-item"><span class="player-num">#${i+1}</span><span class="player-name">${p}</span><button class="btn btn-secondary btn-xs" onclick="removePlayer('${t}',${i})">X</button></div>`).join('');
 }
 
-window.goToToss = async function(){
+window.goToBatsFirst = async function(){
   if(!S.isAdmin){alert('Admin only!');return;}
   if(localTeams.A.players.length<2||localTeams.B.players.length<2){alert('Each team needs at least 2 players!');return;}
   S.teams.A.name=document.getElementById('teamAName').value.trim()||'Team Alpha';
@@ -631,36 +631,26 @@ window.goToToss = async function(){
   S.totalOvers=parseInt(document.getElementById('totalOvers').value)||10;
   S.matchId='match_'+Date.now();
   await setDoc(doc(db,'matches',S.matchId),{matchName:S.matchName,totalOvers:S.totalOvers,teams:S.teams,innings:1,innings1:null,innings2:null,matchOver:false,updatedAt:Date.now()});
-  const tw=document.getElementById('tossWinner');
-  tw.innerHTML=`<option value="">Select...</option><option value="A">${S.teams.A.name}</option><option value="B">${S.teams.B.name}</option>`;
-  document.getElementById('tossStartCard').style.display='none';
-  tossDecisionLocal='';
-  document.getElementById('tossBat').classList.remove('selected');
-  document.getElementById('tossBowl').classList.remove('selected');
-  showPage('pageToss');
+  document.getElementById('batsFirstAName').textContent=S.teams.A.name;
+  document.getElementById('batsFirstBName').textContent=S.teams.B.name;
+  document.getElementById('batsFirstA').classList.remove('selected');
+  document.getElementById('batsFirstB').classList.remove('selected');
+  document.getElementById('batsFirstStartCard').style.display='none';
+  showPage('pageBatsFirst');
 }
 
-window.selectTossDecision = function(d){
-  tossDecisionLocal=d;
-  document.getElementById('tossBat').classList.toggle('selected',d==='bat');
-  document.getElementById('tossBowl').classList.toggle('selected',d==='bowl');
-  checkToss();
-}
-document.getElementById('tossWinner').addEventListener('change',checkToss);
-function checkToss(){
-  const w=document.getElementById('tossWinner').value;
-  if(!w||!tossDecisionLocal) return;
-  S.tossWinner=w; S.tossDecision=tossDecisionLocal;
-  S.battingTeam=tossDecisionLocal==='bat'?w:(w==='A'?'B':'A');
-  S.bowlingTeam=S.battingTeam==='A'?'B':'A';
+window.selectBattingFirst = function(team){
+  S.battingTeam=team; S.bowlingTeam=team==='A'?'B':'A';
+  document.getElementById('batsFirstA').classList.toggle('selected',team==='A');
+  document.getElementById('batsFirstB').classList.toggle('selected',team==='B');
   const bt=S.teams[S.battingTeam], bl=S.teams[S.bowlingTeam];
-  document.getElementById('tossResult').textContent=`${S.teams[w].name} won toss, chose to ${tossDecisionLocal} first. ${bt.name} will bat.`;
+  document.getElementById('batsFirstResult').textContent=`${bt.name} will bat first.`;
   ['selectStriker','selectNonStriker'].forEach((id,i)=>{
     document.getElementById(id).innerHTML=bt.players.map((p,j)=>`<option value="${j}">${p}</option>`).join('');
     if(i===1) document.getElementById(id).selectedIndex=Math.min(1,bt.players.length-1);
   });
   document.getElementById('selectBowler').innerHTML=bl.players.map((p,i)=>`<option value="${i}">${p}</option>`).join('');
-  document.getElementById('tossStartCard').style.display='';
+  document.getElementById('batsFirstStartCard').style.display='';
 }
 
 window.startMatch = async function(){
