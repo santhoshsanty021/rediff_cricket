@@ -406,6 +406,7 @@ select option{background:#111;}
     <div class="btn-group" style="margin-top:4px;">
       <button class="btn btn-secondary btn-sm" onclick="openRetiredModal()">🤕 Retired</button>
       <button class="btn btn-secondary btn-sm" onclick="openNewBowlerModal()">Change Bowler</button>
+      <button class="btn btn-secondary btn-sm" id="swapStrikeBtn" onclick="manualSwapStrike()" style="display:none;">⇄ Swap Strike</button>
     </div>
   </div>
 
@@ -423,7 +424,10 @@ select option{background:#111;}
   </div>
   <div class="tab-content" id="tabFOW"><div class="fow-list" id="fowList"><div class="color-dim" style="font-size:13px;">No wickets yet.</div></div></div>
   <div class="tab-content" id="tabOvers"><div class="over-history-list" id="overHistoryList"><div class="color-dim" style="font-size:13px;">No overs yet.</div></div></div>
-  <div style="margin-top:16px;"><button class="btn btn-secondary btn-sm" onclick="goHome()">All Matches</button></div>
+  <div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <button class="btn btn-secondary btn-sm" onclick="goHome()">All Matches</button>
+    <button class="btn btn-danger btn-sm" id="deleteMatchBtn" style="display:none;" onclick="deleteCurrentMatch()">🗑 Delete Match</button>
+  </div>
 </div>
 
 <!-- PAGE: INNINGS BREAK -->
@@ -629,13 +633,17 @@ window.loadMatches = function(){
         const sc=m.matchOver?'status-completed':inn?'status-live':'status-setup';
         const sl=m.matchOver?'Completed':inn?'🔴 Live':'Setup';
         const t1=m.teams?.A?.name||'Team A', t2=m.teams?.B?.name||'Team B';
+        const delBtn=S.isAdmin?`<button class="btn btn-danger btn-xs" style="margin-left:8px;" onclick="event.stopPropagation();deleteMatchById('${d.id}','${(m.matchName||'Match').replace(/'/g,'&#39;')}')">🗑</button>`:'';
         return `<div class="match-card" onclick="viewMatch('${d.id}')">
           <div>
             <div class="match-card-name">${m.matchName||'Match'}</div>
             <div class="match-card-meta">${t1} vs ${t2} &middot; ${m.totalOvers} overs</div>
             <span class="match-card-status ${sc}">${sl}</span>
           </div>
-          <div class="font-mono fw700 color-green" style="font-size:18px;">${score}</div>
+          <div style="display:flex;align-items:center;">
+            <div class="font-mono fw700 color-green" style="font-size:18px;">${score}</div>
+            ${delBtn}
+          </div>
         </div>`;
       }).join('');
     });
@@ -661,6 +669,7 @@ function setupScoringPage(){
   document.getElementById('adminBanner').style.display=isAdmin?'':'none';
   document.getElementById('scoringPad').style.display=isAdmin?'':'none';
   document.getElementById('resultNewMatchBtn').style.display=isAdmin?'':'none';
+  document.getElementById('deleteMatchBtn').style.display=isAdmin?'':'none';
   document.getElementById('headerStatus').textContent=S.innings===1?'1st Innings':'2nd Innings';
   if(S.innings===2&&S.innings1){
     document.getElementById('targetInfo').style.display='';
@@ -1133,6 +1142,30 @@ window.confirmNewBowler = async function(){
   inn.currentBowlerIdx=idx; closeModal('newBowlerModal'); await saveDB(); renderScoring();
 }
 
+window.manualSwapStrike = async function(){
+  if(!S.isAdmin) return;
+  const inn=S.currentInnings;
+  if(inn.nonStrikerIdx<0) return;
+  saveSnap(); swap(); await saveDB(); renderScoring();
+}
+
+window.deleteCurrentMatch = async function(){
+  if(!S.isAdmin) return;
+  if(!confirm(`Delete "${S.matchName}"?\nThis cannot be undone.`)) return;
+  if(unsubMatch){ unsubMatch(); unsubMatch=null; }
+  try{
+    await deleteDoc(doc(db,'matches',S.matchId));
+    S.matchId=null; goHome();
+  }catch(e){ console.error(e); alert('Delete failed'); }
+}
+
+window.deleteMatchById = async function(id,name){
+  if(!S.isAdmin) return;
+  if(!confirm(`Delete "${name}"?\nThis cannot be undone.`)) return;
+  if(S.matchId===id&&unsubMatch){ unsubMatch(); unsubMatch=null; S.matchId=null; }
+  try{ await deleteDoc(doc(db,'matches',id)); }catch(e){ console.error(e); alert('Delete failed'); }
+}
+
 function checkOver(){
   const inn=S.currentInnings;
   const legal=inn.currentOverBalls.filter(b=>!b.extra).length;
@@ -1195,6 +1228,8 @@ function renderScoring(){
     return `<div class="ball-chip ${cls}">${b.wicket?'W':b.type}</div>`;
   }).join('');
   document.getElementById('undoBtn').disabled=!S.isAdmin||!inn.stateHistory.length;
+  const swapBtn=document.getElementById('swapStrikeBtn');
+  if(swapBtn) swapBtn.style.display=(S.isAdmin&&inn.nonStrikerIdx>=0)?'':'none';
   if(S.innings===2&&S.innings1){
     const tgt=S.innings1.runs+1, need=tgt-inn.runs, bl=(S.totalOvers*6)-inn.balls;
     document.getElementById('rrCurrent').textContent=inn.balls>0?(inn.runs/(inn.balls/6)).toFixed(2):'0.00';
