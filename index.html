@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>rediff cricket</title>
 <meta name="theme-color" content="#de2936">
+<script>
+// Theme: 'auto' (follow OS) | 'light' | 'dark'. Per-viewer convenience, stored in localStorage when available.
+(function(){
+  var KEY='rcTheme', ICON={auto:'🌓',light:'☀️',dark:'🌙'}, NEXT={auto:'light',light:'dark',dark:'auto'};
+  function get(){ try{ var t=localStorage.getItem(KEY); return t==='light'||t==='dark'?t:'auto'; }catch(e){ return 'auto'; } }
+  function apply(t){
+    if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t;
+    var b=document.getElementById('themeBtn'); if(b){ b.textContent=ICON[t]; b.title='Theme: '+t+' (tap to change)'; }
+  }
+  window.cycleTheme=function(){ var t=NEXT[get()]; try{ localStorage.setItem(KEY,t); }catch(e){} apply(t); };
+  apply(get());
+  document.addEventListener('DOMContentLoaded',function(){ apply(get()); });
+})();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..800&display=swap" rel="stylesheet">
 <style>
 /* Rediff Games palette (games.rediff.com). Cricket colours tuned for a light background. */
@@ -18,8 +32,15 @@
   --wicket:#b51c2c;--wicket-soft:#fff0f2;
   --extra:#c45a00;--extra-soft:#fff3e6;
   --info:#3b5b8c;--info-soft:#eef3fa;
+  --brand-line:#f6cfc8;--four-line:#c8e3ca;--six-line:#f0d9b0;--wicket-line:#f1c6cc;--extra-line:#f3d3b3;--info-line:#d3deef;
+  --lb:#6b63c4;--lb-soft:#f0effa;--danger:#b51c2c;--danger-hover:#951525;
+  --hover:#efebe4;--placeholder:#a9a49a;--overlay:rgba(39,38,34,0.45);--shadow-lg:0 20px 60px rgba(32,33,43,0.18);
   --font:'DM Sans',Arial,sans-serif;
+  color-scheme:light;
 }
+/* Dark theme: follows the OS unless the viewer picked light/dark (header toggle → data-theme on <html>). */
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --brand:#e8434e;--brand-hover:#f2606a;--brand-soft:#3a1d1f;--brand-line:#5c2a2e;--bg:#141311;--surface:#1e1c19;--surface2:#282622;--border:#33302b;--border-strong:#45413a;--text:#f2eee7;--text-dim:#a39d92;--shadow:0 3px 9px #00000059;--runs:#6cb2f0;--runs-soft:#16263a;--four:#6cc070;--four-soft:#172b19;--six:#f0b54e;--six-soft:#33270f;--wicket:#ff6b77;--wicket-soft:#3a181d;--extra:#ffa257;--extra-soft:#35230f;--info:#93b6ea;--info-soft:#18222f;--four-line:#2c4a2e;--six-line:#5a4519;--wicket-line:#64262e;--extra-line:#5c3c1b;--info-line:#2c3e57;--lb:#a49cf0;--lb-soft:#23213a;--danger:#c62f3d;--danger-hover:#d94352;--hover:#2f2c28;--placeholder:#6f6a61;--overlay:rgba(0,0,0,0.6);--shadow-lg:0 20px 60px #000000a6;color-scheme:dark; } }
+:root[data-theme="dark"]{ --brand:#e8434e;--brand-hover:#f2606a;--brand-soft:#3a1d1f;--brand-line:#5c2a2e;--bg:#141311;--surface:#1e1c19;--surface2:#282622;--border:#33302b;--border-strong:#45413a;--text:#f2eee7;--text-dim:#a39d92;--shadow:0 3px 9px #00000059;--runs:#6cb2f0;--runs-soft:#16263a;--four:#6cc070;--four-soft:#172b19;--six:#f0b54e;--six-soft:#33270f;--wicket:#ff6b77;--wicket-soft:#3a181d;--extra:#ffa257;--extra-soft:#35230f;--info:#93b6ea;--info-soft:#18222f;--four-line:#2c4a2e;--six-line:#5a4519;--wicket-line:#64262e;--extra-line:#5c3c1b;--info-line:#2c3e57;--lb:#a49cf0;--lb-soft:#23213a;--danger:#c62f3d;--danger-hover:#d94352;--hover:#2f2c28;--placeholder:#6f6a61;--overlay:rgba(0,0,0,0.6);--shadow-lg:0 20px 60px #000000a6;color-scheme:dark; }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;min-height:100vh;-webkit-font-smoothing:antialiased;}
 ::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px;}
@@ -27,7 +48,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15
 .app-title{font-size:22px;font-weight:800;letter-spacing:-0.5px;color:var(--text);white-space:nowrap;}
 .app-title span{color:var(--brand);}
 .header-right{display:flex;align-items:center;gap:10px;}
-.status-badge{background:var(--brand-soft);border:1px solid #f6cfc8;padding:4px 12px;border-radius:100px;font-size:11px;font-weight:700;letter-spacing:0.5px;color:var(--brand);text-transform:uppercase;}
+.theme-btn{background:var(--surface2);border:1px solid var(--border);border-radius:100px;width:30px;height:28px;font-size:14px;line-height:1;cursor:pointer;flex-shrink:0;}
+.theme-btn:hover{background:var(--hover);}
+.status-badge{background:var(--brand-soft);border:1px solid var(--brand-line);padding:4px 12px;border-radius:100px;font-size:11px;font-weight:700;letter-spacing:0.5px;color:var(--brand);text-transform:uppercase;}
 .sync-indicator{font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px;}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--four);}
 .sync-dot.syncing{background:var(--six);animation:blink 0.5s infinite;}
@@ -52,8 +75,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15
 .login-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--text-dim);font-size:12px;}
 .login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:var(--border);}
 .guest-btn{width:100%;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;color:var(--text);font-family:var(--font);font-size:14px;font-weight:650;cursor:pointer;transition:all 0.15s;}
-.guest-btn:hover{border-color:var(--border-strong);background:#efebe4;}
-.login-error{background:var(--wicket-soft);border:1px solid #f1c6cc;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--wicket);margin-bottom:12px;display:none;}
+.guest-btn:hover{border-color:var(--border-strong);background:var(--hover);}
+.login-error{background:var(--wicket-soft);border:1px solid var(--wicket-line);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--wicket);margin-bottom:12px;display:none;}
 
 .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow);}
 .card-title{font-size:17px;font-weight:750;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
@@ -64,14 +87,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15
 .match-card-name{font-weight:700;font-size:15px;}
 .match-card-meta{font-size:12px;color:var(--text-dim);margin-top:3px;}
 .match-card-status{display:inline-block;padding:2px 9px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-top:5px;margin-right:4px;}
-.status-live{background:var(--wicket-soft);color:var(--wicket);border:1px solid #f1c6cc;}
-.status-completed{background:var(--four-soft);color:var(--four);border:1px solid #c8e3ca;}
-.status-setup{background:var(--six-soft);color:var(--six);border:1px solid #f0d9b0;}
-.status-tour{background:var(--brand-soft);color:var(--brand);border:1px solid #f6cfc8;}
+.status-live{background:var(--wicket-soft);color:var(--wicket);border:1px solid var(--wicket-line);}
+.status-completed{background:var(--four-soft);color:var(--four);border:1px solid var(--four-line);}
+.status-setup{background:var(--six-soft);color:var(--six);border:1px solid var(--six-line);}
+.status-tour{background:var(--brand-soft);color:var(--brand);border:1px solid var(--brand-line);}
 label{display:block;font-size:12px;font-weight:650;color:var(--text-dim);margin-bottom:5px;}
 input[type="text"],input[type="number"],input[type="password"],select{width:100%;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;color:var(--text);font-family:var(--font);font-size:15px;padding:10px 14px;transition:border-color 0.2s;outline:none;}
 input:focus,select:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft);}
-input::placeholder{color:#a9a49a;}
+input::placeholder{color:var(--placeholder);}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
 .form-group{margin-bottom:12px;}
 select option{background:var(--surface);color:var(--text);}
@@ -80,8 +103,8 @@ select option{background:var(--surface);color:var(--text);}
 .btn-primary:hover{background:var(--brand-hover);}
 .btn-secondary{background:var(--surface);border:1px solid var(--border-strong);color:var(--text);}
 .btn-secondary:hover{background:var(--surface2);}
-.btn-danger{background:var(--wicket);color:#fff;}
-.btn-danger:hover{background:#951525;}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-danger:hover{background:var(--danger-hover);}
 .btn-sm{padding:7px 14px;font-size:13px;}
 .btn-xs{padding:5px 11px;font-size:12px;}
 .btn:disabled{opacity:0.4;cursor:not-allowed;}
@@ -115,7 +138,7 @@ select option{background:var(--surface);color:var(--text);}
 .ball-6{background:var(--six-soft);border-color:var(--six);color:var(--six);}
 .ball-W{background:var(--wicket-soft);border-color:var(--wicket);color:var(--wicket);}
 .ball-NB,.ball-WD{background:var(--extra-soft);border-color:var(--extra);color:var(--extra);}
-.ball-LB,.ball-B{background:#f0effa;border-color:#6b63c4;color:#6b63c4;}
+.ball-LB,.ball-B{background:var(--lb-soft);border-color:var(--lb);color:var(--lb);}
 .scoring-pad{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:12px 0;}
 .score-btn{padding:12px 6px;border:2px solid var(--border);border-radius:14px;font-family:var(--font);font-size:20px;font-weight:800;cursor:pointer;transition:all 0.15s;text-align:center;background:var(--surface);color:var(--text);}
 .score-btn:hover{transform:translateY(-1px);box-shadow:var(--shadow);}
@@ -137,9 +160,9 @@ select option{background:var(--surface);color:var(--text);}
 .tab-btn.active{color:var(--brand);border-bottom-color:var(--brand);}
 .tab-content{display:none;}
 .tab-content.active{display:block;}
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(39,38,34,0.45);z-index:200;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay{display:none;position:fixed;inset:0;background:var(--overlay);z-index:200;align-items:center;justify-content:center;padding:16px;}
 .modal-overlay.open{display:flex;}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;width:100%;max-width:400px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(32,33,43,0.18);animation:popIn 0.2s ease;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;width:100%;max-width:400px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);animation:popIn 0.2s ease;}
 @keyframes popIn{from{transform:scale(0.95);opacity:0}to{transform:scale(1);opacity:1}}
 .modal-title{font-size:20px;font-weight:800;color:var(--wicket);margin-bottom:14px;}
 .rr-bar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
@@ -150,7 +173,7 @@ select option{background:var(--surface);color:var(--text);}
 .live-over-label{font-size:12px;font-weight:650;color:var(--text-dim);margin-bottom:6px;}
 .undo-area{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
 .fow-list{display:flex;flex-wrap:wrap;gap:5px;}
-.fow-chip{background:var(--wicket-soft);border:1px solid #f1c6cc;border-radius:100px;padding:3px 10px;font-variant-numeric:tabular-nums;font-size:12px;color:var(--wicket);}
+.fow-chip{background:var(--wicket-soft);border:1px solid var(--wicket-line);border-radius:100px;padding:3px 10px;font-variant-numeric:tabular-nums;font-size:12px;color:var(--wicket);}
 .over-history-list{display:flex;flex-direction:column;gap:5px;}
 .over-history-item{display:flex;align-items:center;gap:6px;font-size:12px;}
 .over-num{font-variant-numeric:tabular-nums;color:var(--text-dim);min-width:45px;}
@@ -169,17 +192,17 @@ select option{background:var(--surface);color:var(--text);}
 .innings-tab{flex:1;padding:9px;background:var(--surface);border:1px solid var(--border);border-radius:100px;color:var(--text-dim);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;text-align:center;transition:all 0.15s;white-space:nowrap;}
 .innings-tab.active{background:var(--brand-soft);border-color:var(--brand);color:var(--brand);}
 .alert{padding:9px 13px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:10px;}
-.alert-info{background:var(--info-soft);border:1px solid #d3deef;color:var(--info);}
-.alert-warning{background:var(--extra-soft);border:1px solid #f3d3b3;color:var(--extra);}
-.alert-success{background:var(--four-soft);border:1px solid #c8e3ca;color:var(--four);}
-.viewer-banner{background:var(--info-soft);border:1px solid #d3deef;border-radius:12px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--info);font-weight:600;}
-.admin-banner{background:var(--brand-soft);border:1px solid #f6cfc8;border-radius:12px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--brand);font-weight:600;}
+.alert-info{background:var(--info-soft);border:1px solid var(--info-line);color:var(--info);}
+.alert-warning{background:var(--extra-soft);border:1px solid var(--extra-line);color:var(--extra);}
+.alert-success{background:var(--four-soft);border:1px solid var(--four-line);color:var(--four);}
+.viewer-banner{background:var(--info-soft);border:1px solid var(--info-line);border-radius:12px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--info);font-weight:600;}
+.admin-banner{background:var(--brand-soft);border:1px solid var(--brand-line);border-radius:12px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--brand);font-weight:600;}
 .text-center{text-align:center;}.mt-10{margin-top:10px;}.mb-10{margin-bottom:10px;}
 .color-green,.color-brand{color:var(--brand);}.color-four{color:var(--four);}.color-gold{color:var(--six);}.color-red{color:var(--wicket);}.color-dim{color:var(--text-dim);}
 .fw700{font-weight:700;}.font-mono{font-variant-numeric:tabular-nums;}
 .steps{display:flex;justify-content:center;gap:5px;margin-bottom:18px;}
 .step-dot{width:7px;height:7px;border-radius:50%;background:var(--border-strong);transition:background 0.3s;}
-.step-dot.done{background:#eea9a1;}.step-dot.current{background:var(--brand);}
+.step-dot.done{background:var(--brand-line);}.step-dot.current{background:var(--brand);}
 /* MoM / points */
 .mom-card{border-top:3px solid var(--six);}
 .mom-label{font-size:12px;font-weight:750;color:var(--six);text-transform:uppercase;letter-spacing:0.5px;}
@@ -187,14 +210,14 @@ select option{background:var(--surface);color:var(--text);}
 .mom-meta{font-size:13px;color:var(--text-dim);margin-top:2px;}
 .mom-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
 .pts-chip{background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:3px 10px;font-size:12px;font-weight:700;color:var(--text-dim);font-variant-numeric:tabular-nums;}
-.pts-chip.total{background:var(--six-soft);border-color:#f0d9b0;color:var(--six);}
+.pts-chip.total{background:var(--six-soft);border-color:var(--six-line);color:var(--six);}
 .mom-details{margin-top:12px;}
 .mom-details summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--brand);margin-bottom:8px;}
 .score-table tr.mom-row td{background:var(--six-soft);}
 /* Tournament */
 .tour-title{font-size:24px;font-weight:800;letter-spacing:-0.5px;}
 .tour-head{border-top:3px solid var(--brand);}
-.tour-champ{margin-top:10px;padding:9px 12px;background:var(--six-soft);border:1px solid #f0d9b0;border-radius:12px;color:var(--six);font-size:13px;font-weight:600;}
+.tour-champ{margin-top:10px;padding:9px 12px;background:var(--six-soft);border:1px solid var(--six-line);border-radius:12px;color:var(--six);font-size:13px;font-weight:600;}
 .tour-action{border-top:3px solid var(--six);}
 .tour-section{font-size:12px;font-weight:750;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.6px;margin:14px 0 8px;}
 .tour-section:first-child{margin-top:0;}
@@ -214,6 +237,7 @@ select option{background:var(--surface);color:var(--text);}
 <div class="app-header">
   <div class="app-title"><span>rediff</span> cricket</div>
   <div class="header-right">
+    <button class="theme-btn" id="themeBtn" onclick="cycleTheme()" title="Theme" aria-label="Change theme">🌓</button>
     <div class="sync-indicator">
       <div class="sync-dot syncing" id="syncDot"></div>
       <span id="syncText">...</span>
@@ -1484,7 +1508,7 @@ function renderBatTable(){
     const sr=b.balls>0?((b.runs/b.balls)*100).toFixed(1):'0.0';
     const isS=i===inn.strikerIdx, isNS=i===inn.nonStrikerIdx;
     let cls=b.status==='batting'?'batting-now':b.status==='dismissed'?'dismissed':'';
-    return `<tr class="${cls}"><td><span class="fw700">${b.name}</span>${isS?'<span class="strike-ind">●</span>':''}${isNS?'<span class="strike-ind" style="background:var(--text-dim);color:#fff">○</span>':''}${b.status==='dismissed'?`<div class="dismissal-text">${b.dismissal}</div>`:''}${b.status==='retired'?'<div class="dismissal-text color-dim">retired hurt</div>':''}${b.status==='yet to bat'?'<div class="dismissal-text color-dim">Yet to bat</div>':''}</td><td class="fw700 ${b.runs>=50?'color-gold':''}">${b.runs}</td><td class="font-mono">${b.balls}</td><td class="color-four">${b.fours}</td><td class="color-gold">${b.sixes}</td><td class="color-dim font-mono">${sr}</td></tr>`;
+    return `<tr class="${cls}"><td><span class="fw700">${b.name}</span>${isS?'<span class="strike-ind">●</span>':''}${isNS?'<span class="strike-ind" style="background:var(--text-dim);color:var(--surface)">○</span>':''}${b.status==='dismissed'?`<div class="dismissal-text">${b.dismissal}</div>`:''}${b.status==='retired'?'<div class="dismissal-text color-dim">retired hurt</div>':''}${b.status==='yet to bat'?'<div class="dismissal-text color-dim">Yet to bat</div>':''}</td><td class="fw700 ${b.runs>=50?'color-gold':''}">${b.runs}</td><td class="font-mono">${b.balls}</td><td class="color-four">${b.fours}</td><td class="color-gold">${b.sixes}</td><td class="color-dim font-mono">${sr}</td></tr>`;
   }).join('');
   const ext=inn.extras, extT=(ext.nb||0)+(ext.wd||0)+(ext.lb||0)+(ext.b||0);
   document.getElementById('battingExtrasRow').innerHTML=`<tr><td colspan="2" class="color-dim" style="font-size:11px;">Extras (NB ${ext.nb||0}, WD ${ext.wd||0})</td><td colspan="4" class="fw700">${extT}</td></tr><tr style="border-top:1px solid var(--border-strong);"><td class="fw700 color-green">TOTAL</td><td colspan="2" class="fw700 color-green">${inn.runs}/${inn.wickets}</td><td colspan="3" class="color-dim font-mono">${getOvStr(inn.balls)} ov</td></tr>`;
