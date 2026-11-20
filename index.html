@@ -450,12 +450,13 @@ select option{background:var(--surface);color:var(--text);}
 <!-- PAGE: INNINGS BREAK -->
 <div class="page" id="pageBreak">
   <div class="card text-center">
-    <div class="card-title" style="justify-content:center;">Innings Break</div>
+    <div class="card-title" style="justify-content:center;" id="breakTitle">Innings Break</div>
     <div id="inningsBreakInfo" style="margin:14px 0;"></div>
     <div class="form-group"><label>Opener 1 (Striker)</label><select id="selectStriker2"></select></div>
     <div class="form-group"><label>Opener 2 (Non-Striker)</label><select id="selectNonStriker2"></select></div>
     <div class="form-group"><label>Opening Bowler</label><select id="selectBowler2"></select></div>
-    <button class="btn btn-primary" onclick="startSecondInnings()" style="width:100%;padding:13px;margin-top:6px;">START 2ND INNINGS</button>
+    <button class="btn btn-primary" id="breakStartBtn" onclick="startSecondInnings()" style="width:100%;padding:13px;margin-top:6px;">START 2ND INNINGS</button>
+    <button class="btn btn-secondary" id="tieFinishBtn" onclick="finishAsTie()" style="width:100%;padding:11px;margin-top:8px;display:none;">Finish as a tie (no super over)</button>
   </div>
 </div>
 
@@ -466,10 +467,7 @@ select option{background:var(--surface);color:var(--text);}
     <div class="result-title" id="resultTitle">Match Over</div>
     <div class="result-desc" id="resultDesc"></div>
   </div>
-  <div class="innings-tabs">
-    <div class="innings-tab active" onclick="showInningsResult(1,this)">1st Innings</div>
-    <div class="innings-tab" onclick="showInningsResult(2,this)">2nd Innings</div>
-  </div>
+  <div class="innings-tabs" id="resultInningsTabs"></div>
   <div id="resultScorecardArea"></div>
   <div class="btn-group mt-10">
     <button class="btn btn-secondary" onclick="goHome()">All Matches</button>
@@ -558,7 +556,8 @@ let S = {
   matchId:null, isAdmin:false, matchName:'', totalOvers:10,
   teams:{A:{name:'',players:[]},B:{name:'',players:[]}},
   battingTeam:'', bowlingTeam:'',
-  innings:1, innings1:null, innings2:null, currentInnings:null, matchOver:false
+  innings:1, innings1:null, innings2:null, currentInnings:null, matchOver:false,
+  superOvers:[], summary:null, tournamentId:null, fixtureId:null, stage:null
 };
 let localTeams = {A:{players:[]}, B:{players:[]}};
 let unsubMatch = null;
@@ -586,7 +585,15 @@ function loadFromDoc(data){
   S.battingTeam=data.battingTeam||''; S.bowlingTeam=data.bowlingTeam||'';
   S.innings=data.innings||1; S.innings1=data.innings1||null;
   S.innings2=data.innings2||null; S.matchOver=data.matchOver||false;
-  S.currentInnings=S.innings===1?S.innings1:S.innings2;
+  S.superOvers=data.superOvers||[]; S.summary=data.summary||null;
+  S.tournamentId=data.tournamentId||null; S.fixtureId=data.fixtureId||null; S.stage=data.stage||null;
+  S.currentInnings=innByNum(S.innings);
+}
+// Clears everything match-specific so nothing leaks into the next match (teams/name/overs are set by the caller).
+function resetMatchState(){
+  if(unsubMatch){ unsubMatch(); unsubMatch=null; }
+  Object.assign(S,{matchId:null,innings:1,innings1:null,innings2:null,currentInnings:null,matchOver:false,
+    battingTeam:'',bowlingTeam:'',superOvers:[],summary:null,tournamentId:null,fixtureId:null,stage:null});
 }
 
 // ─── AUTH ───
@@ -693,7 +700,7 @@ window.viewMatch = function(matchId){
     loadFromDoc(snap.data());
     setupScoringPage();
     if(S.matchOver){ renderResult(); showPage('pageResult'); }
-    else if(S.innings===2&&!S.innings2){ renderBreakPage(); showPage('pageBreak'); }
+    else if(S.innings>=2&&!innByNum(S.innings)){ renderBreakPage(); showPage('pageBreak'); }
     else if(S.innings1){ renderScoring(); showPage('pageScoring'); }
   });
 }
@@ -705,10 +712,11 @@ function setupScoringPage(){
   document.getElementById('scoringPad').style.display=isAdmin?'':'none';
   document.getElementById('resultNewMatchBtn').style.display=isAdmin?'':'none';
   document.getElementById('deleteMatchBtn').style.display=isAdmin?'':'none';
-  document.getElementById('headerStatus').textContent=S.innings===1?'1st Innings':'2nd Innings';
-  if(S.innings===2&&S.innings1){
+  document.getElementById('headerStatus').textContent=innLabel(S.innings);
+  const tgt=targetFor(S.innings);
+  if(tgt!=null){
     document.getElementById('targetInfo').style.display='';
-    document.getElementById('targetDisplay').textContent=S.innings1.runs+1;
+    document.getElementById('targetDisplay').textContent=tgt;
     document.getElementById('rrBar').style.display='';
   } else {
     document.getElementById('targetInfo').style.display='none';
@@ -913,7 +921,7 @@ window.newMatchSetup = function(){
   document.getElementById('matchName').value='Friendly Match';
   document.getElementById('totalOvers').value=10;
   renderPlayerList('A'); renderPlayerList('B');
-  S.innings1=null;S.innings2=null;S.currentInnings=null;S.matchOver=false;S.innings=1;S.matchId=null;
+  resetMatchState();
   showPage('pageSetup');
 }
 window.startNextMatch = function(){
@@ -926,7 +934,7 @@ window.startNextMatch = function(){
   document.getElementById('totalOvers').value=S.totalOvers||10;
   document.getElementById('matchName').value=S.matchName||'Friendly Match';
   renderPlayerList('A'); renderPlayerList('B');
-  S.innings1=null;S.innings2=null;S.currentInnings=null;S.matchOver=false;S.innings=1;S.matchId=null;
+  resetMatchState();
   showPage('pageSetup');
 }
 
@@ -976,7 +984,7 @@ window.goToBatsFirst = async function(){
 async function createMatchDoc(){
   S.matchId='match_'+Date.now();
   S.innings=1; S.innings1=null; S.innings2=null; S.currentInnings=null; S.matchOver=false;
-  S.battingTeam=''; S.bowlingTeam='';
+  S.battingTeam=''; S.bowlingTeam=''; S.superOvers=[]; S.summary=null;
   await saveDB();
   document.getElementById('batsFirstAName').textContent=S.teams.A.name;
   document.getElementById('batsFirstBName').textContent=S.teams.B.name;
@@ -1017,9 +1025,10 @@ window.startMatch = async function(){
   setupScoringPage(); await saveDB(); showPage('pageScoring'); renderScoring();
 }
 
-function createInn(btId,blId){
+function createInn(btId,blId,opts={}){
   const bt=S.teams[btId], bl=S.teams[blId];
   return{battingTeamId:btId,bowlingTeamId:blId,runs:0,wickets:0,balls:0,
+    maxOvers:opts.maxOvers??null,maxWickets:opts.maxWickets??null,
     extras:{nb:0,wd:0},
     batsmen:bt.players.map(p=>({id:pid(p)||genPlayerId(),name:pname(p),isJoker:!!(p&&p.isJoker),runs:0,balls:0,fours:0,sixes:0,status:'yet to bat',dismissal:'',out:null})),
     bowlers:bl.players.map(p=>({id:pid(p)||genPlayerId(),name:pname(p),balls:0,runs:0,wickets:0,nb:0,wd:0,maidens:0,dots:0,foursConceded:0})),
@@ -1030,6 +1039,27 @@ function createInn(btId,blId){
 
 // ─── LAST BATSMAN ───
 function isLastAlone(){ return S.currentInnings.wickets>=S.currentInnings.batsmen.length-1; }
+
+// ─── INNINGS HELPERS ───
+// Innings 1–2 are the match; 3+ are super overs, stored in pairs: S.superOvers[k] = {innings1, innings2}.
+const SUPER_OVER={overs:1,wickets:2};
+function innByNum(n){
+  if(n===1) return S.innings1; if(n===2) return S.innings2;
+  const p=(S.superOvers||[])[Math.floor((n-3)/2)]; return p?(n%2?p.innings1:p.innings2):null;
+}
+function setInn(n,inn){
+  if(n===1) S.innings1=inn; else if(n===2) S.innings2=inn;
+  else{ const k=Math.floor((n-3)/2); S.superOvers=S.superOvers||[]; S.superOvers[k]=S.superOvers[k]||{innings1:null,innings2:null}; S.superOvers[k][n%2?'innings1':'innings2']=inn; }
+}
+function oversLimit(inn){ return inn.maxOvers??S.totalOvers; }
+function isAllOut(inn){ return inn.wickets>=(inn.maxWickets??inn.batsmen.length); }
+function targetFor(n){ const prev=n%2===0?innByNum(n-1):null; return prev?prev.runs+1:null; }
+function innLabel(n){ return n===1?'1st Innings':n===2?'2nd Innings':`Super Over ${Math.floor((n-3)/2)+1}`; }
+// Who bats in innings n≥2: even → the side that bowled in n-1; odd (a new super over) → the side that batted last.
+function sidesFor(n){
+  const prev=innByNum(n-1), bat=n%2===0?prev.bowlingTeamId:prev.battingTeamId;
+  return {bat,bowl:bat==='A'?'B':'A'};
+}
 
 // ─── SCORING ───
 window.recordBall = async function(runs){
@@ -1142,9 +1172,11 @@ window.recordWicket = async function(){
   inn.lastBall={desc:`WICKET — ${ob.name}`,runs,wicket:true};
   closeModal('wicketModal');
   const avail=inn.batsmen.filter(b=>b.status==='yet to bat'||b.status==='retired');
-  if(avail.length===0){                                       // no replacement — lone survivor bats on (last man standing)
+  if(avail.length===0||isAllOut(inn)){                        // super over: 2 wickets ends it even with batters left
+    if(avail.length===0){                                       // no replacement — lone survivor bats on (last man standing)
     const survivors=inn.batsmen.map((b,i)=>({b,i})).filter(x=>x.b.status==='batting').map(x=>x.i);
     if(survivors.length===1){ inn.strikerIdx=survivors[0]; inn.nonStrikerIdx=-1; }
+    }
     checkOver(); await checkInnEnd();                          // ends only at all-out (wickets>=N) or overs up
     if(!S.matchOver){ await saveDB(); renderScoring(); }
     return;
@@ -1261,20 +1293,29 @@ function checkOver(){
     inn.overHistory.push({overNum:inn.overHistory.length+1,balls:[...inn.currentOverBalls],bowlerIdx:inn.currentBowlerIdx,runs:or});
     inn.currentOverBalls=[]; inn.currentOverRunsTemp=0;
     if(!isLastAlone()) swap();
-    if(Math.floor(inn.balls/6)<S.totalOvers) openNewBowlerModal();
+    if(Math.floor(inn.balls/6)<oversLimit(inn)&&!isAllOut(inn)) openNewBowlerModal();
   }
 }
 function swap(){ [S.currentInnings.strikerIdx,S.currentInnings.nonStrikerIdx]=[S.currentInnings.nonStrikerIdx,S.currentInnings.strikerIdx]; }
 
 async function checkInnEnd(){
-  const inn=S.currentInnings;
-  const allOut=inn.wickets>=inn.batsmen.length;
-  const oversUp=inn.balls>=S.totalOvers*6;
-  if(S.innings===2){const tgt=S.innings1.runs+1;if(inn.runs>=tgt){await endMatch();return;}}
-  if(allOut||oversUp){
-    if(S.innings===1){S.innings=2;S.innings2=null;await saveDB();renderBreakPage();showPage('pageBreak');}
+  const inn=S.currentInnings, n=S.innings, tgt=targetFor(n);
+  if(tgt!=null&&inn.runs>=tgt){ await endMatch(); return; }
+  if(isAllOut(inn)||inn.balls>=oversLimit(inn)*6){
+    closeModal('newBowlerModal');
+    if(n%2===1){ S.innings=n+1; await saveDB(); renderBreakPage(); showPage('pageBreak'); }
+    else if(inn.runs===innByNum(n-1).runs){                   // tie → super over (friendlies may finish as a tie)
+      S.superOvers=S.superOvers||[]; S.superOvers.push({innings1:null,innings2:null});
+      S.innings=n+1; await saveDB(); renderBreakPage(); showPage('pageBreak');
+    }
     else await endMatch();
   }
+}
+// Friendly only: skip the pending super over and record a tie.
+window.finishAsTie = async function(){
+  if(!S.isAdmin||S.tournamentId||S.innings<3||innByNum(S.innings)) return;
+  S.superOvers.pop(); S.innings-=1; S.currentInnings=innByNum(S.innings);
+  await endMatch();
 }
 async function endMatch(){ S.matchOver=true; await saveDB(); renderResult(); showPage('pageResult'); }
 
@@ -1299,7 +1340,7 @@ window.undoLastBall = async function(){
 // ─── RENDER ───
 function renderScoring(){
   const inn=S.currentInnings; if(!inn) return;
-  document.getElementById('battingTeamLabel').textContent=`${S.teams[inn.battingTeamId].name} — Innings ${S.innings}`;
+  document.getElementById('battingTeamLabel').textContent=`${S.teams[inn.battingTeamId].name} — ${innLabel(S.innings)}`;
   document.getElementById('scoreRuns').textContent=inn.runs;
   document.getElementById('scoreWkts').textContent=inn.wickets;
   document.getElementById('scoreOvers').textContent=`${getOvStr(inn.balls)} overs`;
@@ -1316,8 +1357,9 @@ function renderScoring(){
   document.getElementById('undoBtn').disabled=!S.isAdmin||!inn.stateHistory.length;
   const swapBtn=document.getElementById('swapStrikeBtn');
   if(swapBtn) swapBtn.style.display=(S.isAdmin&&inn.nonStrikerIdx>=0)?'':'none';
-  if(S.innings===2&&S.innings1){
-    const tgt=S.innings1.runs+1, need=tgt-inn.runs, bl=(S.totalOvers*6)-inn.balls;
+  const tgt=targetFor(S.innings);
+  if(tgt!=null){
+    const need=tgt-inn.runs, bl=(oversLimit(inn)*6)-inn.balls;
     document.getElementById('rrCurrent').textContent=inn.balls>0?(inn.runs/(inn.balls/6)).toFixed(2):'0.00';
     document.getElementById('rrRequired').textContent=bl>0?(need/(bl/6)).toFixed(2):'—';
     document.getElementById('ballsLeft').textContent=Math.max(0,bl);
@@ -1361,10 +1403,27 @@ function renderOvHist(){
     :'<div class="color-dim" style="font-size:13px;">No overs yet.</div>';
 }
 
+// Start screen for innings 2 and every super-over innings (n = S.innings, not yet created).
 function renderBreakPage(){
-  const i1=S.innings1;
-  document.getElementById('inningsBreakInfo').innerHTML=`<div class="alert alert-info"><strong>${S.teams[i1.battingTeamId].name}</strong> scored <strong>${i1.runs}/${i1.wickets}</strong> in ${getOvStr(i1.balls)} overs.<br>${S.teams[i1.bowlingTeamId].name} needs <strong>${i1.runs+1} runs</strong> to win.</div>`;
-  const bt2=S.teams[i1.bowlingTeamId], bl2=S.teams[i1.battingTeamId];
+  const n=S.innings, prev=innByNum(n-1), {bat,bowl}=sidesFor(n);
+  const pT=S.teams[prev.battingTeamId].name, bT=S.teams[bat].name;
+  let info, title, btn;
+  if(n===2){
+    title='Innings Break'; btn='START 2ND INNINGS';
+    info=`<strong>${pT}</strong> scored <strong>${prev.runs}/${prev.wickets}</strong> in ${getOvStr(prev.balls)} overs.<br>${bT} needs <strong>${prev.runs+1} runs</strong> to win.`;
+  }else if(n%2===1){
+    title=`Match Tied — ${innLabel(n)}`; btn='START SUPER OVER';
+    info=`Scores level at <strong>${prev.runs}</strong>. <strong>${bT}</strong> bats first: ${SUPER_OVER.overs} over, ${SUPER_OVER.wickets} wickets.`;
+  }else{
+    title=`${innLabel(n)} — Chase`; btn='START SUPER OVER CHASE';
+    info=`<strong>${pT}</strong> made <strong>${prev.runs}/${prev.wickets}</strong> in the super over.<br>${bT} needs <strong>${prev.runs+1}</strong> off ${SUPER_OVER.overs*6} balls.`;
+  }
+  document.getElementById('breakTitle').textContent=title;
+  document.getElementById('headerStatus').textContent=n===2?'Innings Break':innLabel(n);
+  document.getElementById('breakStartBtn').textContent=btn;
+  document.getElementById('tieFinishBtn').style.display=(S.isAdmin&&n>=3&&n%2===1&&!S.tournamentId)?'':'none';
+  document.getElementById('inningsBreakInfo').innerHTML=`<div class="alert alert-info">${info}</div>`;
+  const bt2=S.teams[bat], bl2=S.teams[bowl];
   const st2Opts=bt2.players.map((p,j)=>`<option value="${j}">${pname(p)}</option>`).join('');
   document.getElementById('selectStriker2').innerHTML=st2Opts;
   if(bt2.players.length<2){
@@ -1382,33 +1441,47 @@ window.startSecondInnings = async function(){
   const nsI=parseInt(document.getElementById('selectNonStriker2').value);
   const bI=parseInt(document.getElementById('selectBowler2').value);
   if(nsI>=0&&sI===nsI){alert('Must be different players!');return;}
-  S.innings2=createInn(S.innings1.bowlingTeamId,S.innings1.battingTeamId);
-  S.currentInnings=S.innings2; S.innings=2;
+  const n=S.innings, {bat,bowl}=sidesFor(n);
+  const opts=n>=3?{maxOvers:SUPER_OVER.overs,maxWickets:Math.min(SUPER_OVER.wickets,S.teams[bat].players.length)}:{};
+  setInn(n,createInn(bat,bowl,opts));
+  S.currentInnings=innByNum(n);
   const inn=S.currentInnings;
   inn.strikerIdx=sI; inn.nonStrikerIdx=nsI; inn.currentBowlerIdx=bI;
   inn.batsmen[sI].status='batting'; if(nsI>=0) inn.batsmen[nsI].status='batting';
   setupScoringPage(); await saveDB(); showPage('pageScoring'); renderScoring();
 }
 
-function renderResult(){
+// Decided by the last completed pair of innings (the match, or the last super over).
+function matchResult(){
   const i1=S.innings1, i2=S.innings2;
-  let title='Match Over', desc='';
-  if(i2){
-    const t1=S.teams[i1.battingTeamId], t2=S.teams[i2.battingTeamId], tgt=i1.runs+1;
-    if(i2.runs>=tgt){const wl=i2.batsmen.length-1-i2.wickets;title=`${t2.name} Won!`;desc=`by ${wl} wicket${wl!==1?'s':''}`;}
-    else if(i2.runs===i1.runs){title='Match Tied!';}
-    else{const m=i1.runs-i2.runs;title=`${t1.name} Won!`;desc=`by ${m} run${m!==1?'s':''}`;}
-  }
-  document.getElementById('resultTitle').textContent=title;
-  document.getElementById('resultDesc').textContent=desc;
+  if(!i1||!i2) return {winnerSide:null,tied:false,bySuperOver:false,title:'Match Over',desc:''};
+  const pairs=[[i1,i2],...(S.superOvers||[]).filter(p=>p&&p.innings1&&p.innings2).map(p=>[p.innings1,p.innings2])];
+  const [a,b]=pairs[pairs.length-1], bySuperOver=pairs.length>1;
+  if(a.runs===b.runs) return {winnerSide:null,tied:true,bySuperOver,title:'Match Tied!',desc:bySuperOver?'Super over tied too':''};
+  const aWon=a.runs>b.runs, w=aWon?a:b, side=w.battingTeamId, name=S.teams[side].name;
+  let desc;
+  if(bySuperOver) desc=`won the super over (${a.runs}/${a.wickets} v ${b.runs}/${b.wickets})`;
+  else if(aWon){ const m=a.runs-b.runs; desc=`by ${m} run${m!==1?'s':''}`; }
+  else{ const wl=b.batsmen.length-1-b.wickets; desc=`by ${wl} wicket${wl!==1?'s':''}`; }
+  return {winnerSide:side,tied:false,bySuperOver,title:`${name} Won!`,desc};
+}
+function renderResult(){
+  const r=matchResult();
+  document.getElementById('resultTitle').textContent=r.title;
+  document.getElementById('resultDesc').textContent=r.desc;
   document.getElementById('headerStatus').textContent='Completed';
-  showInningsResult(1,document.querySelector('.innings-tab'));
+  const nums=[1,2]; (S.superOvers||[]).forEach((p,k)=>{ if(p&&p.innings1) nums.push(3+2*k); if(p&&p.innings2) nums.push(4+2*k); });
+  document.getElementById('resultInningsTabs').innerHTML=nums.map((n,i)=>{
+    const inn=innByNum(n); const lbl=n<=2?innLabel(n):`SO${Math.floor((n-3)/2)+1} · ${inn?S.teams[inn.battingTeamId].name:''}`;
+    return `<div class="innings-tab${i===0?' active':''}" onclick="showInningsResult(${n},this)">${lbl}</div>`;
+  }).join('');
+  showInningsResult(1,document.querySelector('#resultInningsTabs .innings-tab'));
 }
 
 window.showInningsResult = function(n,el){
   document.querySelectorAll('.innings-tab').forEach(t=>t.classList.remove('active'));
   if(el) el.classList.add('active');
-  const inn=n===1?S.innings1:S.innings2;
+  const inn=innByNum(n);
   if(!inn){document.getElementById('resultScorecardArea').innerHTML='<div class="alert alert-warning">No data.</div>';return;}
   const bt=S.teams[inn.battingTeamId], ext=inn.extras, extT=(ext.nb||0)+(ext.wd||0)+(ext.lb||0)+(ext.b||0);
   document.getElementById('resultScorecardArea').innerHTML=`<div class="card"><div class="card-title">${bt.name} — ${inn.runs}/${inn.wickets} (${getOvStr(inn.balls)} ov)</div><div style="overflow-x:auto;margin-bottom:12px;"><table class="score-table"><thead><tr><th>Batsman</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>${inn.batsmen.map(b=>{const sr=b.balls>0?((b.runs/b.balls)*100).toFixed(1):'0.0';return `<tr class="${b.status==='dismissed'?'dismissed':''}"><td><span class="fw700">${b.name}</span>${b.dismissal?`<div class="dismissal-text">${b.dismissal}</div>`:`<div class="dismissal-text color-dim">${b.status}</div>`}</td><td class="fw700 ${b.runs>=50?'color-gold':''}">${b.runs}</td><td>${b.balls}</td><td class="color-four">${b.fours}</td><td class="color-gold">${b.sixes}</td><td class="font-mono color-dim">${sr}</td></tr>`;}).join('')}</tbody><tfoot><tr><td colspan="2" class="color-dim" style="font-size:11px;">Extras (NB ${ext.nb||0}, WD ${ext.wd||0})</td><td colspan="4" class="fw700">${extT}</td></tr><tr><td class="fw700 color-green">TOTAL</td><td colspan="2" class="fw700 color-green">${inn.runs}/${inn.wickets}</td><td colspan="3" class="color-dim font-mono">${getOvStr(inn.balls)} ov</td></tr></tfoot></table></div><div class="card-title" style="font-size:15px;">Bowling</div><div style="overflow-x:auto;margin-bottom:12px;"><table class="bowling-table"><thead><tr><th>Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>NB</th><th>WD</th><th>Econ</th></tr></thead><tbody>${inn.bowlers.filter(b=>b.balls>0).map(b=>{const econ=b.balls>0?(b.runs/(b.balls/6)).toFixed(2):'0.00';return `<tr><td class="fw700">${b.name}</td><td class="font-mono">${getOvStr(b.balls)}</td><td>${b.maidens}</td><td>${b.runs}</td><td class="color-red fw700">${b.wickets}</td><td>${b.nb}</td><td>${b.wd}</td><td class="font-mono color-dim">${econ}</td></tr>`;}).join('')}</tbody></table></div><div class="card-title" style="font-size:15px;">Fall of Wickets</div><div class="fow-list">${inn.fallOfWickets.length?inn.fallOfWickets.map(f=>`<div class="fow-chip">${f.wicket}-${f.score} (${f.batsman}, ${f.ball})</div>`).join(''):'<div class="color-dim">No wickets fell.</div>'}</div></div>`;
