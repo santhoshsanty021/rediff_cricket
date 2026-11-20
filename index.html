@@ -536,10 +536,10 @@ const firebaseConfig = {
   appId: "1:1054815401913:web:a36e6032e351fd71b36868"
 };
 
-// ─── ADMIN CREDENTIALS (change here to update) ───
-const ADMIN_USER = "admin";
-const ADMIN_PASS = "admin@123";
-// ─────────────────────────────────────────────────
+// ─── ADMIN CREDENTIALS ───
+// Checked against Firestore admins/{username} = {salt, passHash}, where passHash = sha256hex(`${salt}:${password}`).
+// No credentials live in this file. Add or rotate an admin by writing that doc.
+// ─────────────────────────
 
 // ─── HOME SCREEN ───
 const MATCH_LIST_DAYS = 14;  // home screen shows matches updated within the last N days (tweak here)
@@ -584,18 +584,30 @@ function loadFromDoc(data){
 }
 
 // ─── AUTH ───
-window.doLogin = function(){
-  const u=document.getElementById('loginUser').value.trim();
+async function sha256Hex(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+let loginBusy=false;
+window.doLogin = async function(){
+  if(loginBusy) return;
+  const u=document.getElementById('loginUser').value.trim().toLowerCase();
   const p=document.getElementById('loginPass').value;
   const err=document.getElementById('loginError');
-  if(u===ADMIN_USER && p===ADMIN_PASS){
+  const fail=msg=>{ err.style.display=''; err.textContent=msg; };
+  if(!u||!p){ fail('Enter username and password.'); return; }
+  loginBusy=true;
+  try{
+    const snap=await getDoc(doc(db,'admins',u));
+    const a=snap.exists()?snap.data():null;
+    if(!a||!a.salt||a.passHash!==await sha256Hex(`${a.salt}:${p}`)){ fail('Wrong username or password!'); return; }
     err.style.display='none';
+    document.getElementById('loginPass').value='';
     S.isAdmin=true;
     sessionStorage.setItem('csRole','admin');
     applyRole(); goHome();
-  } else {
-    err.style.display=''; err.textContent='Wrong username or password!';
-  }
+  }catch(e){ console.error(e); fail('Could not check login. Are you online?'); }
+  finally{ loginBusy=false; }
 }
 
 document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
