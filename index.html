@@ -180,6 +180,17 @@ select option{background:var(--surface);color:var(--text);}
 .steps{display:flex;justify-content:center;gap:5px;margin-bottom:18px;}
 .step-dot{width:7px;height:7px;border-radius:50%;background:var(--border-strong);transition:background 0.3s;}
 .step-dot.done{background:#eea9a1;}.step-dot.current{background:var(--brand);}
+/* MoM / points */
+.mom-card{border-top:3px solid var(--six);}
+.mom-label{font-size:12px;font-weight:750;color:var(--six);text-transform:uppercase;letter-spacing:0.5px;}
+.mom-name{font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-top:2px;}
+.mom-meta{font-size:13px;color:var(--text-dim);margin-top:2px;}
+.mom-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+.pts-chip{background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:3px 10px;font-size:12px;font-weight:700;color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.pts-chip.total{background:var(--six-soft);border-color:#f0d9b0;color:var(--six);}
+.mom-details{margin-top:12px;}
+.mom-details summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--brand);margin-bottom:8px;}
+.score-table tr.mom-row td{background:var(--six-soft);}
 @media(max-width:600px){.form-row{grid-template-columns:1fr;}}
 @media(max-width:480px){.app-header{padding:10px 12px;}.app-title{font-size:19px;}.header-right{gap:6px;}#syncText{display:none;}.status-badge,.user-badge{padding:3px 8px;font-size:10px;}}
 .status-badge,.user-badge{white-space:nowrap;}
@@ -467,6 +478,7 @@ select option{background:var(--surface);color:var(--text);}
     <div class="result-title" id="resultTitle">Match Over</div>
     <div class="result-desc" id="resultDesc"></div>
   </div>
+  <div id="momCard"></div>
   <div class="innings-tabs" id="resultInningsTabs"></div>
   <div id="resultScorecardArea"></div>
   <div class="btn-group mt-10">
@@ -548,6 +560,17 @@ const firebaseConfig = {
 // ─── HOME SCREEN ───
 const MATCH_LIST_DAYS = 14;  // home screen shows matches updated within the last N days (tweak here)
 // ───────────────────
+
+// ─── FANTASY POINTS (MoM / MoT) — tuned for 4-over, six-hit-out cricket; edit to tune ───
+const PTS = {
+  run:1, fourBonus:1, bat15:2, bat25:4,                 // 25-run bonus replaces the 15-run one
+  srMinBalls:6, srHi:{min:200,pts:2}, srLo:{max:100,pts:-1}, duck:-2,
+  wicket:5, dot:1, fourConceded:-1, maiden:7, haul2:2, haul3:4,   // six hit out counts as a wicket
+  econMinBalls:6, econGood:{max:4,pts:2}, econBad:{min:12,pts:-2},
+  catch:3, catches3:2, stumping:4, runOut:4,
+};
+// Super overs never count toward points, leaderboards or NRR.
+// ──────────────────────────────────────────────────────────────
 
 const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
@@ -1172,7 +1195,9 @@ window.recordWicket = async function(){
   inn.lastBall={desc:`WICKET — ${ob.name}`,runs,wicket:true};
   closeModal('wicketModal');
   const avail=inn.batsmen.filter(b=>b.status==='yet to bat'||b.status==='retired');
-  if(avail.length===0||isAllOut(inn)){                        // super over: 2 wickets ends it even with batters left
+  const tgtW=targetFor(S.innings);
+  const innDone=isAllOut(inn)||inn.balls>=oversLimit(inn)*6||(tgtW!=null&&inn.runs>=tgtW);
+  if(avail.length===0||innDone){                              // innings over (last ball, all out, super-over 2 wkts, chase done) → no incoming batter
     if(avail.length===0){                                       // no replacement — lone survivor bats on (last man standing)
     const survivors=inn.batsmen.map((b,i)=>({b,i})).filter(x=>x.b.status==='batting').map(x=>x.i);
     if(survivors.length===1){ inn.strikerIdx=survivors[0]; inn.nonStrikerIdx=-1; }
@@ -1317,7 +1342,13 @@ window.finishAsTie = async function(){
   S.superOvers.pop(); S.innings-=1; S.currentInnings=innByNum(S.innings);
   await endMatch();
 }
-async function endMatch(){ S.matchOver=true; await saveDB(); renderResult(); showPage('pageResult'); }
+async function endMatch(){
+  S.matchOver=true;
+  S.summary=buildSummary();
+  [1,2,3,4,5,6,7,8].map(innByNum).forEach(i=>{ if(i) i.stateHistory=[]; });   // undo history is dead weight once the match is over
+  await saveDB(); renderResult(); showPage('pageResult');
+  if(S.tournamentId&&typeof advanceTournament==='function') advanceTournament(S.tournamentId).catch(e=>console.error(e));
+}
 
 // ─── UNDO ───
 function saveSnap(){
@@ -1465,11 +1496,95 @@ function matchResult(){
   else{ const wl=b.batsmen.length-1-b.wickets; desc=`by ${wl} wicket${wl!==1?'s':''}`; }
   return {winnerSide:side,tied:false,bySuperOver,title:`${name} Won!`,desc};
 }
+// ─── POINTS & SUMMARY ───
+function playerPoints(p){
+  let bat=0,bowl=0,field=0;
+  const b=p.bat;
+  if(b){
+    bat+=b.r*PTS.run+b.f4*PTS.fourBonus;
+    if(b.r>=25) bat+=PTS.bat25; else if(b.r>=15) bat+=PTS.bat15;
+    if(b.b>=PTS.srMinBalls){ const sr=b.r/b.b*100; if(sr>=PTS.srHi.min) bat+=PTS.srHi.pts; else if(sr<PTS.srLo.max) bat+=PTS.srLo.pts; }
+    if(b.out&&b.r===0) bat+=PTS.duck;
+  }
+  const w=p.bowl;
+  if(w){
+    bowl+=w.wk*PTS.wicket+w.dots*PTS.dot+w.foursConceded*PTS.fourConceded+w.maidens*PTS.maiden;
+    if(w.wk>=3) bowl+=PTS.haul3; else if(w.wk>=2) bowl+=PTS.haul2;
+    if(w.balls>=PTS.econMinBalls){ const e=w.runs/(w.balls/6); if(e<=PTS.econGood.max) bowl+=PTS.econGood.pts; else if(e>PTS.econBad.min) bowl+=PTS.econBad.pts; }
+  }
+  const f=p.field;
+  field+=f.ct*PTS.catch+(f.ct>=3?PTS.catches3:0)+f.st*PTS.stumping+f.ro*PTS.runOut;
+  return {bat,bowl,field,total:bat+bowl+field};
+}
+// Compact, self-contained record of a finished match: everything tournament screens need, from main innings only.
+function buildSummary(){
+  const r=matchResult(), players={};
+  const P=(id,name,side)=>(players[id]??={name,side,bat:null,bowl:null,field:{ct:0,st:0,ro:0}});
+  ['A','B'].forEach(side=>(S.teams[side].players||[]).forEach(p=>{ const id=pid(p); if(id) P(id,pname(p),side); }));
+  const side0=()=>({runsFor:0,ballsFor:0,runsAgainst:0,ballsAgainst:0});
+  const sides={A:{savedTeamId:S.teams.A.savedTeamId||null,...side0()},B:{savedTeamId:S.teams.B.savedTeamId||null,...side0()}};
+  for(const inn of [S.innings1,S.innings2]){
+    if(!inn) continue;
+    const bs=inn.battingTeamId, bw=inn.bowlingTeamId;
+    const balls=isAllOut(inn)?oversLimit(inn)*6:inn.balls;     // NRR: an all-out side is charged its full overs
+    Object.assign(sides[bs],{runsFor:sides[bs].runsFor+inn.runs,ballsFor:sides[bs].ballsFor+balls});
+    Object.assign(sides[bw],{runsAgainst:sides[bw].runsAgainst+inn.runs,ballsAgainst:sides[bw].ballsAgainst+balls});
+    for(const b of inn.batsmen){
+      const p=P(b.id,b.name,bs);
+      if(b.status!=='yet to bat') p.bat={r:b.runs,b:b.balls,f4:b.fours,f6:b.sixes,out:b.status==='dismissed',how:(b.out&&b.out.how)||null};
+      const fid=b.out&&b.out.fielderId;
+      if(fid){
+        const fb=inn.bowlers.find(x=>x.id===fid), fp=P(fid,fb?fb.name:'?',bw);
+        if(b.out.how==='caught') fp.field.ct++; else if(b.out.how==='stumped') fp.field.st++; else if(b.out.how==='runout') fp.field.ro++;
+      }
+    }
+    for(const w of inn.bowlers){
+      if(w.balls+(w.nb||0)+(w.wd||0)===0) continue;
+      P(w.id,w.name,bw).bowl={balls:w.balls,runs:w.runs,wk:w.wickets,dots:w.dots||0,foursConceded:w.foursConceded||0,maidens:w.maidens||0,nb:w.nb||0,wd:w.wd||0};
+    }
+  }
+  for(const p of Object.values(players)) p.pts=playerPoints(p);
+  const ranked=Object.entries(players).sort(([,a],[,b])=>b.pts.total-a.pts.total
+    ||(b.side===r.winnerSide)-(a.side===r.winnerSide)||(b.pts.bat+b.pts.bowl)-(a.pts.bat+a.pts.bowl));
+  const auto=ranked.length?ranked[0][0]:null;
+  return {v:1,result:{winnerSide:r.winnerSide,tied:r.tied,bySuperOver:r.bySuperOver,title:r.title,desc:r.desc},
+    sides,players,mom:{auto,playerId:auto,override:false}};
+}
+function perfLine(p){
+  const out=[];
+  if(p.bat) out.push(`${p.bat.r}${p.bat.out?'':'*'} (${p.bat.b})`);
+  if(p.bowl) out.push(`${p.bowl.wk}/${p.bowl.runs} (${getOvStr(p.bowl.balls)})`);
+  const f=p.field, fl=[f.ct?`${f.ct} ct`:'',f.st?`${f.st} st`:'',f.ro?`${f.ro} ro`:''].filter(Boolean).join(', ');
+  if(fl) out.push(fl);
+  return out.join(' · ')||'—';
+}
+function renderMoM(){
+  const el=document.getElementById('momCard'), sm=S.summary;
+  if(!sm||!sm.players||!sm.mom||!sm.mom.playerId){ el.innerHTML=''; return; }
+  const id=sm.mom.playerId, p=sm.players[id]; if(!p){ el.innerHTML=''; return; }
+  const ranked=Object.entries(sm.players).sort(([,a],[,b])=>b.pts.total-a.pts.total);
+  const pick=S.isAdmin?`<div class="form-group" style="margin:12px 0 0;"><label>Change Player of the Match</label><select onchange="setMoM(this.value)">${ranked.map(([pid,x])=>`<option value="${pid}"${pid===id?' selected':''}>${x.name} — ${x.pts.total} pts${pid===sm.mom.auto?' (auto)':''}</option>`).join('')}</select></div>`:'';
+  const rows=ranked.map(([pid,x])=>`<tr class="${pid===id?'mom-row':''}"><td><span class="fw700">${x.name}</span><div class="dismissal-text">${S.teams[x.side]?S.teams[x.side].name:''} · ${perfLine(x)}</div></td><td>${x.pts.bat}</td><td>${x.pts.bowl}</td><td>${x.pts.field}</td><td class="fw700">${x.pts.total}</td></tr>`).join('');
+  el.innerHTML=`<div class="card mom-card">
+    <div class="mom-label">⭐ Player of the Match${sm.mom.override?' <span class="color-dim" style="font-weight:600;">(picked by admin)</span>':''}</div>
+    <div class="mom-name">${p.name}</div>
+    <div class="mom-meta">${S.teams[p.side]?S.teams[p.side].name:''} · ${perfLine(p)}</div>
+    <div class="mom-chips"><span class="pts-chip total">${p.pts.total} pts</span><span class="pts-chip">Bat ${p.pts.bat}</span><span class="pts-chip">Bowl ${p.pts.bowl}</span><span class="pts-chip">Field ${p.pts.field}</span></div>
+    ${pick}
+    <details class="mom-details"><summary>Match points</summary><div style="overflow-x:auto;"><table class="score-table"><thead><tr><th>Player</th><th>Bat</th><th>Bowl</th><th>Field</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table></div></details>
+  </div>`;
+}
+window.setMoM = async function(id){
+  if(!S.isAdmin||!S.summary||!S.summary.players[id]) return;
+  S.summary.mom.playerId=id; S.summary.mom.override=id!==S.summary.mom.auto;
+  await saveDB(); renderMoM();
+}
 function renderResult(){
   const r=matchResult();
   document.getElementById('resultTitle').textContent=r.title;
   document.getElementById('resultDesc').textContent=r.desc;
   document.getElementById('headerStatus').textContent='Completed';
+  renderMoM();
   const nums=[1,2]; (S.superOvers||[]).forEach((p,k)=>{ if(p&&p.innings1) nums.push(3+2*k); if(p&&p.innings2) nums.push(4+2*k); });
   document.getElementById('resultInningsTabs').innerHTML=nums.map((n,i)=>{
     const inn=innByNum(n); const lbl=n<=2?innLabel(n):`SO${Math.floor((n-3)/2)+1} · ${inn?S.teams[inn.battingTeamId].name:''}`;
