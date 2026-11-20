@@ -191,6 +191,19 @@ select option{background:var(--surface);color:var(--text);}
 .mom-details{margin-top:12px;}
 .mom-details summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--brand);margin-bottom:8px;}
 .score-table tr.mom-row td{background:var(--six-soft);}
+/* Tournament */
+.tour-title{font-size:24px;font-weight:800;letter-spacing:-0.5px;}
+.tour-head{border-top:3px solid var(--brand);}
+.tour-champ{margin-top:10px;padding:9px 12px;background:var(--six-soft);border:1px solid #f0d9b0;border-radius:12px;color:var(--six);font-size:13px;font-weight:600;}
+.tour-action{border-top:3px solid var(--six);}
+.tour-section{font-size:12px;font-weight:750;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.6px;margin:14px 0 8px;}
+.tour-section:first-child{margin-top:0;}
+.fix-label{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:2px;}
+.fix-result{font-size:13px;font-weight:700;color:var(--four);margin-top:3px;}
+.tour-table tr.qualify td:first-child{border-left:3px solid var(--four);}
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:100px;overflow:hidden;margin-left:8px;flex-shrink:0;}
+.seg button{border:none;background:var(--surface);color:var(--text-dim);font-family:var(--font);font-weight:750;font-size:12px;padding:4px 12px;cursor:pointer;}
+.seg button.on{background:var(--brand);color:#fff;}
 @media(max-width:600px){.form-row{grid-template-columns:1fr;}}
 @media(max-width:480px){.app-header{padding:10px 12px;}.app-title{font-size:19px;}.header-right{gap:6px;}#syncText{display:none;}.status-badge,.user-badge{padding:3px 8px;font-size:10px;}}
 .status-badge,.user-badge{white-space:nowrap;}
@@ -246,6 +259,11 @@ select option{background:var(--surface);color:var(--text);}
 
 <!-- PAGE: HOME -->
 <div class="page" id="pageHome">
+  <div class="card">
+    <div class="card-title">🏆 Tournaments</div>
+    <div class="match-list" id="tourList"><div class="color-dim text-center" style="padding:14px;">Loading...</div></div>
+    <button class="btn btn-secondary" id="newTourBtn" style="display:none;width:100%;margin-top:12px;" onclick="newTournamentSetup()">+ NEW TOURNAMENT</button>
+  </div>
   <div class="card">
     <div class="card-title">🏏 Matches</div>
     <div class="match-list" id="matchList"><div class="color-dim text-center" style="padding:20px;">Loading...</div></div>
@@ -453,7 +471,7 @@ select option{background:var(--surface);color:var(--text);}
   <div class="tab-content" id="tabFOW"><div class="fow-list" id="fowList"><div class="color-dim" style="font-size:13px;">No wickets yet.</div></div></div>
   <div class="tab-content" id="tabOvers"><div class="over-history-list" id="overHistoryList"><div class="color-dim" style="font-size:13px;">No overs yet.</div></div></div>
   <div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-    <button class="btn btn-secondary btn-sm" onclick="goHome()">All Matches</button>
+    <span class="btn-group"><button class="btn btn-secondary btn-sm" onclick="goHome()">All Matches</button><button class="btn btn-secondary btn-sm" id="scoringTourBtn" style="display:none;" onclick="backToTournament()">🏆 Tournament</button></span>
     <button class="btn btn-danger btn-sm" id="deleteMatchBtn" style="display:none;" onclick="deleteCurrentMatch()">🗑 Delete Match</button>
   </div>
 </div>
@@ -484,6 +502,56 @@ select option{background:var(--surface);color:var(--text);}
   <div class="btn-group mt-10">
     <button class="btn btn-secondary" onclick="goHome()">All Matches</button>
     <button class="btn btn-primary" id="resultNewMatchBtn" style="display:none;" onclick="startNextMatch()">Start Next Match</button>
+    <button class="btn btn-primary" id="resultTourBtn" style="display:none;" onclick="backToTournament()">🏆 Back to Tournament</button>
+  </div>
+</div>
+
+<!-- PAGE: NEW TOURNAMENT -->
+<div class="page" id="pageTourNew">
+  <div class="card">
+    <div class="card-title">New Tournament</div>
+    <div class="form-row">
+      <div class="form-group"><label>Name</label><input type="text" id="tourName" value="Rediff Cup"></div>
+      <div class="form-group"><label>Overs per match</label><input type="number" id="tourOvers" min="1" max="50" value="4"></div>
+    </div>
+    <label>Teams (squads lock when the tournament is created)</label>
+    <div class="player-list" id="tourTeamPick"></div>
+    <div class="color-dim" id="tourSummary" style="font-size:12px;margin-top:8px;"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Format</div>
+    <div class="bf-options" style="margin-bottom:12px;">
+      <div class="bf-card" id="tourFmtGroups" onclick="setTourFormat('groups')"><span class="bf-icon">🧩</span>2 Groups<div class="color-dim" style="font-size:11px;font-weight:600;">round robin in each group</div></div>
+      <div class="bf-card" id="tourFmtRR" onclick="setTourFormat('round_robin')"><span class="bf-icon">🔁</span>Round Robin<div class="color-dim" style="font-size:11px;font-weight:600;">everyone plays everyone</div></div>
+    </div>
+    <div class="form-group"><label>After the league stage</label><select id="tourKnockout" onchange="setTourKnockout(this.value)"></select>
+      <div class="color-dim" id="tourKnockoutHint" style="font-size:12px;margin-top:5px;"></div></div>
+    <div class="color-dim" style="font-size:12px;">Ties go to a super over. Tap A / B next to a team to move it between groups.</div>
+  </div>
+  <div id="tourWarn" class="alert alert-warning" style="display:none;"></div>
+  <div class="btn-group">
+    <button class="btn btn-secondary" onclick="goHome()">Back</button>
+    <button class="btn btn-primary" onclick="createTournament()" style="flex:1;padding:13px;">CREATE TOURNAMENT</button>
+  </div>
+</div>
+
+<!-- PAGE: TOURNAMENT -->
+<div class="page" id="pageTour">
+  <div class="card tour-head" id="tourHead"></div>
+  <div id="tourAction"></div>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="tFix" onclick="showTourTab('tFix',this)">Fixtures</button>
+    <button class="tab-btn" data-tab="tTable" onclick="showTourTab('tTable',this)">Table</button>
+    <button class="tab-btn" data-tab="tStats" onclick="showTourTab('tStats',this)">Stats</button>
+    <button class="tab-btn" data-tab="tMvp" onclick="showTourTab('tMvp',this)">MVP</button>
+  </div>
+  <div class="tab-content active" id="tFix"></div>
+  <div class="tab-content" id="tTable"></div>
+  <div class="tab-content" id="tStats"></div>
+  <div class="tab-content" id="tMvp"></div>
+  <div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <button class="btn btn-secondary btn-sm" onclick="goHome()">Home</button>
+    <button class="btn btn-danger btn-sm" id="tourDeleteBtn" style="display:none;" onclick="deleteTournament()">🗑 Delete Tournament</button>
   </div>
 </div>
 
@@ -541,7 +609,7 @@ select option{background:var(--surface);color:var(--text);}
 <!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, orderBy, where, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, getDocs, updateDoc, collection, onSnapshot, query, orderBy, where, limit, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDYGBc8Oilc_MFpBuUwBY-an2oeRY1EKxA",
@@ -679,6 +747,8 @@ function applyRole(){
 window.goHome = function(){
   showPage('pageHome');
   document.getElementById('adminCreateBtn').style.display = S.isAdmin ? '' : 'none';
+  document.getElementById('newTourBtn').style.display = S.isAdmin ? '' : 'none';
+  renderTourList();
   document.getElementById('guestHint').style.display = S.isAdmin ? 'none' : '';
   document.getElementById('headerStatus').textContent = S.isAdmin ? 'Admin' : 'Guest';
   loadMatches();
@@ -703,7 +773,7 @@ window.loadMatches = function(){
           <div>
             <div class="match-card-name">${m.matchName||'Match'}</div>
             <div class="match-card-meta">${t1} vs ${t2} &middot; ${m.totalOvers} overs</div>
-            <span class="match-card-status ${sc}">${sl}</span>
+            <span class="match-card-status ${sc}">${sl}</span>${m.tournamentId?'<span class="match-card-status status-tour">🏆 Tournament</span>':''}
           </div>
           <div style="display:flex;align-items:center;">
             <div class="font-mono fw700 color-green" style="font-size:18px;">${score}</div>
@@ -725,6 +795,7 @@ window.viewMatch = function(matchId){
     if(S.matchOver){ renderResult(); showPage('pageResult'); }
     else if(S.innings>=2&&!innByNum(S.innings)){ renderBreakPage(); showPage('pageBreak'); }
     else if(S.innings1){ renderScoring(); showPage('pageScoring'); }
+    else if(S.isAdmin&&document.querySelector('.page.active')?.id!=='pageBatsFirst') showBatsFirstPage();   // created, toss not done yet
   });
 }
 
@@ -733,7 +804,9 @@ function setupScoringPage(){
   document.getElementById('viewerBanner').style.display=isAdmin?'none':'';
   document.getElementById('adminBanner').style.display=isAdmin?'':'none';
   document.getElementById('scoringPad').style.display=isAdmin?'':'none';
-  document.getElementById('resultNewMatchBtn').style.display=isAdmin?'':'none';
+  document.getElementById('resultNewMatchBtn').style.display=isAdmin&&!S.tournamentId?'':'none';
+  document.getElementById('resultTourBtn').style.display=S.tournamentId?'':'none';
+  document.getElementById('scoringTourBtn').style.display=S.tournamentId?'':'none';
   document.getElementById('deleteMatchBtn').style.display=isAdmin?'':'none';
   document.getElementById('headerStatus').textContent=innLabel(S.innings);
   const tgt=targetFor(S.innings);
@@ -1009,6 +1082,9 @@ async function createMatchDoc(){
   S.innings=1; S.innings1=null; S.innings2=null; S.currentInnings=null; S.matchOver=false;
   S.battingTeam=''; S.bowlingTeam=''; S.superOvers=[]; S.summary=null;
   await saveDB();
+  showBatsFirstPage();
+}
+function showBatsFirstPage(){
   document.getElementById('batsFirstAName').textContent=S.teams.A.name;
   document.getElementById('batsFirstBName').textContent=S.teams.B.name;
   document.getElementById('batsFirstA').classList.remove('selected');
@@ -1295,6 +1371,7 @@ window.manualSwapStrike = async function(){
 window.deleteCurrentMatch = async function(){
   if(!S.isAdmin) return;
   if(!confirm(`Delete "${S.matchName}"?\nThis cannot be undone.`)) return;
+  try{ if(!await releaseFixtureFor(S.matchId)) return; }catch(e){ console.error(e); alert('Delete failed'); return; }
   if(unsubMatch){ unsubMatch(); unsubMatch=null; }
   try{
     await deleteDoc(doc(db,'matches',S.matchId));
@@ -1305,6 +1382,7 @@ window.deleteCurrentMatch = async function(){
 window.deleteMatchById = async function(id,name){
   if(!S.isAdmin) return;
   if(!confirm(`Delete "${name}"?\nThis cannot be undone.`)) return;
+  try{ if(!await releaseFixtureFor(id)) return; }catch(e){ console.error(e); alert('Delete failed'); return; }
   if(S.matchId===id&&unsubMatch){ unsubMatch(); unsubMatch=null; S.matchId=null; }
   try{ await deleteDoc(doc(db,'matches',id)); }catch(e){ console.error(e); alert('Delete failed'); }
 }
@@ -1610,15 +1688,389 @@ window.closeModal = function(id){document.getElementById(id).classList.remove('o
 window.showTab = function(id,btn){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));document.getElementById(id).classList.add('active');if(btn)btn.classList.add('active');}
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m&&m.id!=='incomingModal')m.classList.remove('open');}));
 
+// ─── TOURNAMENT ───
+// Firestore tournaments/{id}: {name, overs, format:'groups'|'round_robin', knockout:'final'|'semis'|'none',
+//   teamIds, squads:{teamId:{name,players:[{id,name}]}} (locked at creation), groups:{A:[...],B:[...]},
+//   fixtures:{fid:{stage:'group'|'league'|'semi'|'final', group, order, label, teamAId, teamBId, matchId}},
+//   status:'group_stage'|'awaiting_knockout'|'knockouts'|'completed', winnerTeamId, createdAt, updatedAt}
+// Matches carry tournamentId/fixtureId/stage; side A of a fixture's match is always fixture.teamAId.
+// Everything shown (table, stats, MVP) is recomputed from finished matches' summaries.
+let tournaments = [];
+let curTour = null, tourMatches = {}, unsubTour = null, unsubTourMatches = null, tourAdvancedOnce = false;
+let tourDraft = null;
+
+// Circle method: rounds of [home, away] pairs; odd counts get a bye.
+function roundRobin(ids){
+  const a=[...ids]; if(a.length%2) a.push(null);
+  const n=a.length, rounds=[];
+  for(let r=0;r<n-1;r++){
+    const pairs=[];
+    for(let i=0;i<n/2;i++){ const x=a[i], y=a[n-1-i]; if(x&&y) pairs.push(r%2?[y,x]:[x,y]); }
+    rounds.push(pairs);
+    a.splice(1,0,a.pop());
+  }
+  return rounds;
+}
+function buildLeagueFixtures(format, groups, teamIds){
+  const fixtures={}; let order=0;
+  const add=(stage,group,label,a,b)=>{ order++; fixtures['f'+order]={stage,group,order,label,teamAId:a,teamBId:b,matchId:null}; };
+  if(format==='groups'){
+    const rA=roundRobin(groups.A), rB=roundRobin(groups.B), counts={A:0,B:0};
+    for(let r=0;r<Math.max(rA.length,rB.length);r++)
+      for(const [g,rounds] of [['A',rA],['B',rB]]) for(const [x,y] of (rounds[r]||[])) add('group',g,`Group ${g} · Match ${++counts[g]}`,x,y);
+  }else{
+    let k=0; for(const round of roundRobin(teamIds)) for(const [x,y] of round) add('league',null,`League · Match ${++k}`,x,y);
+  }
+  return fixtures;
+}
+
+// A fixture's finished match (or null).
+function fixtureMatch(f,byId){ const m=f&&f.matchId&&byId[f.matchId]; return m&&m.matchOver&&m.summary?m:null; }
+function fixtureWinner(f,byId){
+  const m=fixtureMatch(f,byId); if(!m) return null;
+  const w=m.summary.result.winnerSide; return w==='A'?f.teamAId:w==='B'?f.teamBId:null;
+}
+function nrrOf(r){ return (r.bf?r.rf/(r.bf/6):0)-(r.ba?r.ra/(r.ba/6):0); }
+// Points table per group ('A','B') or 'league'. Order: points → NRR → head-to-head → wins.
+function tourStandings(T,byId){
+  const tables={}, h2h={};
+  const keyOf=f=>f.stage==='group'?f.group:'league';
+  const row=(k,id)=>{ tables[k]=tables[k]||{}; return tables[k][id]=tables[k][id]||{teamId:id,name:T.squads[id]?T.squads[id].name:'?',P:0,W:0,L:0,T:0,Pts:0,rf:0,bf:0,ra:0,ba:0}; };
+  if(T.format==='groups') ['A','B'].forEach(g=>(T.groups[g]||[]).forEach(id=>row(g,id)));
+  else (T.teamIds||[]).forEach(id=>row('league',id));
+  for(const f of Object.values(T.fixtures||{})){
+    if(f.stage!=='group'&&f.stage!=='league') continue;
+    const m=fixtureMatch(f,byId); if(!m) continue;
+    const k=keyOf(f), sm=m.summary;
+    for(const [side,id] of [['A',f.teamAId],['B',f.teamBId]]){
+      const r=row(k,id), s=sm.sides[side];
+      r.P++; r.rf+=s.runsFor; r.bf+=s.ballsFor; r.ra+=s.runsAgainst; r.ba+=s.ballsAgainst;
+      if(sm.result.winnerSide===side){ r.W++; r.Pts+=2; } else if(sm.result.winnerSide) r.L++; else { r.T++; r.Pts+=1; }
+    }
+    const w=fixtureWinner(f,byId); if(w){ const l=w===f.teamAId?f.teamBId:f.teamAId; h2h[w+'>'+l]=(h2h[w+'>'+l]||0)+1; }
+  }
+  const out={};
+  for(const [k,rows] of Object.entries(tables)){
+    out[k]=Object.values(rows).map(r=>({...r,nrr:nrrOf(r)})).sort((a,b)=>
+      b.Pts-a.Pts || (Math.abs(b.nrr-a.nrr)>1e-9?b.nrr-a.nrr:0) || (h2h[b.teamId+'>'+a.teamId]||0)-(h2h[a.teamId+'>'+b.teamId]||0) || b.W-a.W || a.name.localeCompare(b.name));
+  }
+  return out;
+}
+// Per-player tournament totals from every finished fixture (main innings only — summaries exclude super overs).
+function tourPlayerStats(T,byId){
+  const P={};
+  const teamOf={}; for(const [tid,sq] of Object.entries(T.squads||{})) for(const p of sq.players) teamOf[p.id]=tid;
+  for(const f of Object.values(T.fixtures||{})){
+    const m=fixtureMatch(f,byId); if(!m) continue;
+    for(const [id,x] of Object.entries(m.summary.players)){
+      const p=P[id]=P[id]||{id,name:x.name,teamId:teamOf[id]||null,M:0,runs:0,balls:0,fours:0,sixes:0,outs:0,hs:0,wk:0,bb:0,br:0,ct:0,st:0,ro:0,bat:0,bowl:0,field:0,pts:0,mom:0};
+      p.M++;
+      if(x.bat){ p.runs+=x.bat.r; p.balls+=x.bat.b; p.fours+=x.bat.f4; p.sixes+=x.bat.f6; p.outs+=x.bat.out?1:0; p.hs=Math.max(p.hs,x.bat.r); }
+      if(x.bowl){ p.wk+=x.bowl.wk; p.bb+=x.bowl.balls; p.br+=x.bowl.runs; }
+      p.ct+=x.field.ct; p.st+=x.field.st; p.ro+=x.field.ro;
+      p.bat+=x.pts.bat; p.bowl+=x.pts.bowl; p.field+=x.pts.field; p.pts+=x.pts.total;
+      if(m.summary.mom&&m.summary.mom.playerId===id) p.mom++;
+    }
+  }
+  return Object.values(P);
+}
+function tourLeaders(T,byId){
+  const all=tourPlayerStats(T,byId);
+  const sr=p=>p.balls?p.runs/p.balls*100:0, econ=p=>p.bb?p.br/(p.bb/6):99;
+  return {
+    runs:all.filter(p=>p.runs>0).sort((a,b)=>b.runs-a.runs||sr(b)-sr(a)).slice(0,10),
+    wickets:all.filter(p=>p.wk>0).sort((a,b)=>b.wk-a.wk||econ(a)-econ(b)).slice(0,10),
+    catches:all.filter(p=>p.ct>0).sort((a,b)=>b.ct-a.ct||b.st-a.st).slice(0,10),
+    mvp:all.filter(p=>p.M>0).sort((a,b)=>b.pts-a.pts||b.mom-a.mom||b.runs-a.runs),
+    sr, econ,
+  };
+}
+// Knockout fixtures from the final league tables. mode: 'final' | 'semis' | 'none' (round robin only).
+function knockoutPatch(T,byId,mode){
+  const st=tourStandings(T,byId), patch={knockout:mode,updatedAt:Date.now()};
+  const fx=(fid,stage,label,a,b)=>{ patch[`fixtures.${fid}`]={stage,group:null,order:100+Object.keys(patch).length,label,teamAId:a,teamBId:b,matchId:null}; };
+  let seeds;
+  if(T.format==='groups'){ const A=st.A.map(r=>r.teamId), B=st.B.map(r=>r.teamId); seeds={f:[A[0],B[0]],s1:[A[0],B[1]],s2:[B[0],A[1]]}; }
+  else{ const L=st.league.map(r=>r.teamId); seeds={f:[L[0],L[1]],s1:[L[0],L[3]],s2:[L[1],L[2]],top:L[0]}; }
+  if(mode==='none'){ patch.status='completed'; patch.winnerTeamId=seeds.top; return patch; }
+  if(mode==='semis'){ fx('k1','semi','Semi-final 1',...seeds.s1); fx('k2','semi','Semi-final 2',...seeds.s2); fx('kf','final','Final',null,null); }
+  else fx('kf','final','Final',...seeds.f);
+  patch.status='knockouts';
+  return patch;
+}
+async function loadTourAndMatches(tid){
+  const ts=await getDoc(doc(db,'tournaments',tid)); if(!ts.exists()) return {};
+  const ms=await getDocs(query(collection(db,'matches'),where('tournamentId','==',tid)));
+  const byId={}; ms.forEach(d=>byId[d.id]=d.data());
+  return {T:{id:tid,...ts.data()},byId};
+}
+// Moves the tournament to its next stage when the current one is finished. Safe to call any time (idempotent).
+async function advanceTournament(tid){
+  if(!S.isAdmin) return;
+  const {T,byId}=await loadTourAndMatches(tid); if(!T) return;
+  const F=Object.entries(T.fixtures||{});
+  let patch=null;
+  if(T.status==='group_stage'){
+    const league=F.filter(([,f])=>f.stage==='group'||f.stage==='league');
+    if(league.length&&league.every(([,f])=>fixtureMatch(f,byId)))
+      patch=T.format==='groups'?{status:'awaiting_knockout',updatedAt:Date.now()}:knockoutPatch(T,byId,T.knockout);
+  }else if(T.status==='knockouts'){
+    const semis=F.filter(([,f])=>f.stage==='semi'), fin=F.find(([,f])=>f.stage==='final');
+    if(fin&&!fin[1].teamAId&&semis.length&&semis.every(([,f])=>fixtureWinner(f,byId))){
+      const w=semis.sort(([,a],[,b])=>a.order-b.order).map(([,f])=>fixtureWinner(f,byId));
+      patch={[`fixtures.${fin[0]}.teamAId`]:w[0],[`fixtures.${fin[0]}.teamBId`]:w[1],updatedAt:Date.now()};
+    }else if(fin&&fixtureWinner(fin[1],byId)) patch={status:'completed',winnerTeamId:fixtureWinner(fin[1],byId),updatedAt:Date.now()};
+  }
+  if(patch) await updateDoc(doc(db,'tournaments',tid),patch);
+}
+window.chooseKnockout = async function(mode){
+  if(!S.isAdmin||!curTour) return;
+  const {T,byId}=await loadTourAndMatches(curTour.id);
+  if(!T||T.status!=='awaiting_knockout') return;
+  await updateDoc(doc(db,'tournaments',T.id),knockoutPatch(T,byId,mode));
+}
+
+// ── Home list
+function loadTournaments(){
+  onSnapshot(query(collection(db,'tournaments'),orderBy('createdAt','desc'),limit(10)), snap=>{
+    tournaments=snap.docs.map(d=>({id:d.id,...d.data()})); renderTourList();
+  }, e=>console.error(e));
+}
+const TOUR_STATUS={group_stage:['Group stage','status-live'],awaiting_knockout:['Group stage done','status-setup'],knockouts:['Knockouts','status-live'],completed:['Completed','status-completed']};
+function tourMeta(T){ return `${(T.teamIds||[]).length} teams · ${T.format==='groups'?'2 groups':'round robin'} · ${T.overs} ov`; }
+function renderTourList(){
+  const el=document.getElementById('tourList'); if(!el) return;
+  el.innerHTML=tournaments.length?tournaments.map(T=>{
+    const [lbl,cls]=TOUR_STATUS[T.status]||['',''];
+    const champ=T.status==='completed'&&T.winnerTeamId&&T.squads[T.winnerTeamId]?` · 🏆 ${T.squads[T.winnerTeamId].name}`:'';
+    return `<div class="match-card" onclick="openTournament('${T.id}')"><div><div class="match-card-name">${T.name}</div><div class="match-card-meta">${tourMeta(T)}${champ}</div><span class="match-card-status ${cls}">${lbl}</span></div><div class="color-dim" style="font-size:20px;">›</div></div>`;
+  }).join(''):'<div class="color-dim text-center" style="padding:14px;">No tournaments yet.</div>';
+}
+
+// ── Create
+window.newTournamentSetup = function(){
+  if(!S.isAdmin) return;
+  tourDraft={teamIds:[],groupOf:{},format:'groups',knockout:'final'};
+  document.getElementById('tourName').value='Rediff Cup';
+  document.getElementById('tourOvers').value=4;
+  document.getElementById('tourWarn').style.display='none';
+  renderTourDraft(); showPage('pageTourNew');
+}
+window.toggleTourTeam = function(id){
+  const d=tourDraft, i=d.teamIds.indexOf(id);
+  if(i>=0){ d.teamIds.splice(i,1); delete d.groupOf[id]; }
+  else{ d.teamIds.push(id); const a=d.teamIds.filter(x=>d.groupOf[x]==='A').length, b=d.teamIds.filter(x=>d.groupOf[x]==='B').length; d.groupOf[id]=a<=b?'A':'B'; }
+  renderTourDraft();
+}
+window.setTourGroup = function(id,g){ tourDraft.groupOf[id]=g; renderTourDraft(); }
+window.setTourFormat = function(f){ tourDraft.format=f; if(f==='groups'&&tourDraft.knockout==='none') tourDraft.knockout='final'; renderTourDraft(); }
+window.setTourKnockout = function(k){ tourDraft.knockout=k; }
+function renderTourDraft(){
+  const d=tourDraft;
+  document.getElementById('tourTeamPick').innerHTML=savedTeams.length?savedTeams.map(t=>{
+    const on=d.teamIds.includes(t.id), g=d.groupOf[t.id];
+    const seg=on&&d.format==='groups'?`<span class="seg"><button class="${g==='A'?'on':''}" onclick="event.preventDefault();setTourGroup('${t.id}','A')">A</button><button class="${g==='B'?'on':''}" onclick="event.preventDefault();setTourGroup('${t.id}','B')">B</button></span>`:'';
+    return `<label class="player-item" style="cursor:pointer;margin:0;"><input type="checkbox" style="width:auto;margin-right:8px;" ${on?'checked':''} onchange="toggleTourTeam('${t.id}')"><span class="player-name" style="margin-left:0;">${t.name} <span class="color-dim" style="font-size:11px;">(${(t.playerIds||[]).length})</span></span>${seg}</label>`;
+  }).join(''):'<div class="color-dim" style="padding:10px;font-size:13px;">No saved teams. Create teams in Manage → Teams first.</div>';
+  document.getElementById('tourFmtGroups').classList.toggle('selected',d.format==='groups');
+  document.getElementById('tourFmtRR').classList.toggle('selected',d.format==='round_robin');
+  const ko=d.format==='groups'
+    ?[['final','Final — A1 v B1'],['semis','Semis — A1 v B2, B1 v A2, then final']]
+    :[['final','Final — 1st v 2nd'],['semis','Semis — 1v4, 2v3, then final'],['none','None — table topper wins']];
+  if(!ko.some(([k])=>k===d.knockout)) d.knockout='final';
+  document.getElementById('tourKnockout').innerHTML=ko.map(([k,l])=>`<option value="${k}"${k===d.knockout?' selected':''}>${l}</option>`).join('');
+  document.getElementById('tourKnockoutHint').textContent=d.format==='groups'?'Default only — you\'ll be asked again when the group stage ends.':'';
+  const n=d.teamIds.length, gA=d.teamIds.filter(x=>d.groupOf[x]==='A').length;
+  document.getElementById('tourSummary').textContent=n?(d.format==='groups'?`${n} teams · Group A ${gA}, Group B ${n-gA}`:`${n} teams · ${n*(n-1)/2} league matches`):'';
+}
+window.createTournament = async function(){
+  if(!S.isAdmin) return;
+  const d=tourDraft, warn=document.getElementById('tourWarn');
+  const fail=m=>{ warn.textContent=m; warn.style.display=''; };
+  const name=document.getElementById('tourName').value.trim(), overs=parseInt(document.getElementById('tourOvers').value)||0;
+  d.knockout=document.getElementById('tourKnockout').value;
+  if(!name||overs<1) return fail('Name and overs are required.');
+  const groups={A:d.teamIds.filter(x=>d.groupOf[x]==='A'),B:d.teamIds.filter(x=>d.groupOf[x]==='B')};
+  if(d.format==='groups'&&(groups.A.length<2||groups.B.length<2)) return fail('Each group needs at least 2 teams.');
+  if(d.format==='round_robin'&&d.teamIds.length<(d.knockout==='semis'?4:d.knockout==='final'?2:2)) return fail(d.knockout==='semis'?'Semis need at least 4 teams.':'Pick at least 2 teams.');
+  const squads={}, owner={}, clash=[];
+  for(const id of d.teamIds){
+    const t=savedTeams.find(x=>x.id===id);
+    const players=(t.playerIds||[]).map(pv=>playerPool.find(p=>p.id===pv)).filter(Boolean).map(p=>({id:p.id,name:p.name}));
+    if(!players.length) return fail(`${t.name} has no players.`);
+    for(const p of players){ if(owner[p.id]) clash.push(`${p.name} (${owner[p.id]} & ${t.name})`); else owner[p.id]=t.name; }
+    squads[id]={name:t.name,players};
+  }
+  if(clash.length) return fail('A player can only be in one squad: '+clash.join(', '));
+  const tid=shortId('tr');
+  const T={name,overs,format:d.format,knockout:d.knockout,teamIds:[...d.teamIds],squads,
+    groups:d.format==='groups'?groups:null,fixtures:buildLeagueFixtures(d.format,groups,d.teamIds),
+    status:'group_stage',winnerTeamId:null,createdAt:Date.now(),updatedAt:Date.now()};
+  try{ await setDoc(doc(db,'tournaments',tid),T); openTournament(tid); }
+  catch(e){ console.error(e); fail('Save failed.'); }
+}
+
+// ── Tournament page
+window.openTournament = function(tid){
+  if(unsubTour) unsubTour(); if(unsubTourMatches) unsubTourMatches();
+  curTour=null; tourMatches={}; tourAdvancedOnce=false;
+  document.getElementById('tourHead').innerHTML='<div class="color-dim">Loading…</div>';
+  showPage('pageTour'); showTourTab('tFix');
+  unsubTour=onSnapshot(doc(db,'tournaments',tid), snap=>{
+    if(!snap.exists()){ goHome(); return; }
+    curTour={id:tid,...snap.data()}; renderTournament();
+    if(!tourAdvancedOnce&&S.isAdmin){ tourAdvancedOnce=true; advanceTournament(tid).catch(e=>console.error(e)); }   // self-heal
+  });
+  unsubTourMatches=onSnapshot(query(collection(db,'matches'),where('tournamentId','==',tid)), snap=>{
+    tourMatches={}; snap.docs.forEach(d=>tourMatches[d.id]=d.data()); renderTournament();
+  });
+}
+window.backToTournament = function(){ if(S.tournamentId) openTournament(S.tournamentId); else goHome(); }
+window.showTourTab = function(id,btn){
+  document.querySelectorAll('#pageTour .tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#pageTour .tab-btn').forEach(t=>t.classList.toggle('active',btn?t===btn:t.dataset.tab===id));
+  document.getElementById(id).classList.add('active');
+}
+const fmtNrr=v=>(v>=0?'+':'')+v.toFixed(3);
+function scoreLine(m){
+  const t=m.teams, i1=m.innings1, i2=m.innings2;
+  const s=i=>i?`${t[i.battingTeamId].name} ${i.runs}/${i.wickets} (${getOvStr(i.balls)})`:'';
+  return [s(i1),s(i2)].filter(Boolean).join(' · ');
+}
+function renderTournament(){
+  const T=curTour; if(!T) return;
+  const byId=tourMatches, [lbl,cls]=TOUR_STATUS[T.status]||['',''];
+  const nm=id=>id&&T.squads[id]?T.squads[id].name:'TBD';
+  document.getElementById('headerStatus').textContent='Tournament';
+  // header
+  const lead=tourLeaders(T,byId), mot=lead.mvp[0];
+  const champ=T.status==='completed'&&T.winnerTeamId?`<div class="tour-champ">🏆 Champions: <strong>${nm(T.winnerTeamId)}</strong>${mot?` &nbsp;·&nbsp; 👑 Player of the Tournament: <strong>${mot.name}</strong> (${mot.pts} pts)`:''}</div>`:'';
+  document.getElementById('tourHead').innerHTML=`<div class="tour-title">${T.name}</div><div class="match-card-meta">${tourMeta(T)}</div><span class="match-card-status ${cls}">${lbl}</span>${champ}`;
+  // admin stage action
+  let act='';
+  if(T.status==='awaiting_knockout'){
+    const st=tourStandings(T,byId), A=st.A||[], B=st.B||[];
+    act=S.isAdmin?`<div class="card tour-action"><div class="card-title">Group stage complete</div>
+      <div class="color-dim" style="font-size:13px;margin-bottom:10px;">Group A: ${A.map(r=>r.name).join(', ')} · Group B: ${B.map(r=>r.name).join(', ')}</div>
+      <div class="btn-group"><button class="btn btn-primary" onclick="chooseKnockout('final')">Final: ${A[0]?.name} v ${B[0]?.name}</button>
+      <button class="btn btn-secondary" onclick="chooseKnockout('semis')">Semis: ${A[0]?.name} v ${B[1]?.name}, ${B[0]?.name} v ${A[1]?.name}</button></div></div>`
+      :`<div class="alert alert-info">Group stage complete — waiting for the admin to set the knockouts.</div>`;
+  }
+  document.getElementById('tourAction').innerHTML=act;
+  // fixtures
+  const F=Object.entries(T.fixtures||{}).sort(([,a],[,b])=>a.order-b.order);
+  const sections=[['group','A','Group A'],['group','B','Group B'],['league',null,'League'],['semi',null,'Semi-finals'],['final',null,'Final']];
+  document.getElementById('tFix').innerHTML=sections.map(([stage,g,title])=>{
+    const list=F.filter(([,f])=>f.stage===stage&&(g==null||f.group===g)); if(!list.length) return '';
+    return `<div class="tour-section">${title}</div><div class="match-list">${list.map(([fid,f])=>{
+      const m=f.matchId&&byId[f.matchId], done=fixtureMatch(f,byId);
+      let status, right='';
+      if(done){
+        const sm=done.summary, mom=sm.mom&&sm.players[sm.mom.playerId];
+        const w=fixtureWinner(f,byId), rt=w?`${nm(w)} ${sm.result.bySuperOver?sm.result.desc:'won '+sm.result.desc}`:'Tied';
+        status=`<div class="match-card-meta">${scoreLine(done)}</div><div class="fix-result">${rt}</div>${mom?`<div class="match-card-meta">⭐ ${mom.name}</div>`:''}`;
+      }else if(m){ status=`<div class="match-card-meta">${scoreLine(m)||'Starting…'}</div><span class="match-card-status status-live">🔴 Live</span>`; }
+      else if(!f.teamAId){ status='<div class="match-card-meta">Waiting for semi-final results</div>'; }
+      else{ status='<div class="match-card-meta">Not started</div>'; if(S.isAdmin) right=`<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();startFixture('${fid}')">Start</button>`; }
+      const click=f.matchId?`onclick="viewMatch('${f.matchId}')"`:'';
+      return `<div class="match-card" ${click} style="${f.matchId?'':'cursor:default;'}"><div style="min-width:0;"><div class="fix-label">${f.label}</div><div class="match-card-name">${nm(f.teamAId)} v ${nm(f.teamBId)}</div>${status}</div>${right}</div>`;
+    }).join('')}</div>`;
+  }).join('');
+  // table
+  const st=tourStandings(T,byId);
+  const tbl=(title,rows,q)=>`<div class="tour-section">${title}</div><div style="overflow-x:auto;"><table class="score-table tour-table"><thead><tr><th>#</th><th style="min-width:110px;">Team</th><th>P</th><th>W</th><th>L</th><th>Pts</th><th>NRR</th></tr></thead><tbody>${rows.map((r,i)=>`<tr class="${i<q?'qualify':''}"><td>${i+1}</td><td class="fw700">${r.name}</td><td>${r.P}</td><td>${r.W}</td><td>${r.L}</td><td class="fw700">${r.Pts}</td><td>${fmtNrr(r.nrr)}</td></tr>`).join('')}</tbody></table></div>`;
+  document.getElementById('tTable').innerHTML=(T.format==='groups'?tbl('Group A',st.A||[],T.knockout==='semis'?2:1)+tbl('Group B',st.B||[],T.knockout==='semis'?2:1):tbl('League',st.league||[],T.knockout==='semis'?4:T.knockout==='final'?2:1))
+    +'<div class="color-dim" style="font-size:12px;margin-top:8px;">Win 2 · Tie 1 · Super-over wins count as wins · Order: points, NRR, head-to-head, wins. All-out innings count the full overs for NRR.</div>';
+  // stats
+  const board=(title,rows,cols)=>`<div class="tour-section">${title}</div>`+(rows.length?`<div style="overflow-x:auto;"><table class="score-table"><thead><tr><th>#</th><th style="min-width:110px;">Player</th>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${rows.map((p,i)=>`<tr><td>${i+1}</td><td><span class="fw700">${p.name}</span><div class="dismissal-text">${nm(p.teamId)}</div></td>${cols.map((c,j)=>`<td class="${j===0?'fw700':''}">${c[1](p)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:'<div class="color-dim" style="font-size:13px;padding:6px 0 12px;">No data yet.</div>');
+  document.getElementById('tStats').innerHTML=
+    board('🏏 Most runs',lead.runs,[['R',p=>p.runs],['B',p=>p.balls],['SR',p=>lead.sr(p).toFixed(1)],['HS',p=>p.hs],['4s',p=>p.fours]])+
+    board('🎯 Most wickets',lead.wickets,[['W',p=>p.wk],['O',p=>getOvStr(p.bb)],['R',p=>p.br],['Econ',p=>lead.econ(p).toFixed(2)]])+
+    board('🧤 Most catches',lead.catches,[['Ct',p=>p.ct],['St',p=>p.st],['RO',p=>p.ro]]);
+  // MVP
+  document.getElementById('tMvp').innerHTML=(mot?`<div class="card mom-card" style="margin-bottom:12px;"><div class="mom-label">👑 Player of the Tournament${T.status==='completed'?'':' — current leader'}</div><div class="mom-name">${mot.name}</div><div class="mom-meta">${nm(mot.teamId)} · ${mot.M} match${mot.M!==1?'es':''}${mot.mom?` · ⭐ ×${mot.mom}`:''}</div><div class="mom-chips"><span class="pts-chip total">${mot.pts} pts</span><span class="pts-chip">Bat ${mot.bat}</span><span class="pts-chip">Bowl ${mot.bowl}</span><span class="pts-chip">Field ${mot.field}</span></div></div>`:'')
+    +board('Points leaderboard',lead.mvp,[['Pts',p=>p.pts],['Bat',p=>p.bat],['Bowl',p=>p.bowl],['Field',p=>p.field],['M',p=>p.M]])
+    +'<div class="color-dim" style="font-size:12px;margin-top:8px;">Sum of match points (main innings only). MoM picks don\'t change points.</div>';
+  document.getElementById('tourDeleteBtn').style.display=S.isAdmin?'':'none';
+}
+
+// ── Fixtures → matches
+window.startFixture = async function(fid){
+  if(!S.isAdmin||!curTour) return;
+  const fresh=await getDoc(doc(db,'tournaments',curTour.id)); if(!fresh.exists()) return;
+  const T={id:curTour.id,...fresh.data()}, f=T.fixtures[fid];
+  if(!f||!f.teamAId||!f.teamBId) return;
+  if(f.matchId){ viewMatch(f.matchId); return; }                     // someone already started it
+  resetMatchState();
+  const sq=id=>({name:T.squads[id].name,savedTeamId:id,players:T.squads[id].players.map(p=>({id:p.id,name:p.name,isJoker:false}))});
+  S.teams={A:sq(f.teamAId),B:sq(f.teamBId)};
+  S.totalOvers=T.overs; S.matchName=`${T.name} · ${f.label}`;
+  S.tournamentId=T.id; S.fixtureId=fid; S.stage=f.stage;
+  await createMatchDoc();
+  await updateDoc(doc(db,'tournaments',T.id),{[`fixtures.${fid}.matchId`]:S.matchId,updatedAt:Date.now()});
+}
+// Before deleting a tournament match: refuse if a later stage depends on it, else free its fixture for a replay.
+async function releaseFixtureFor(matchId){
+  const ms=await getDoc(doc(db,'matches',matchId)); if(!ms.exists()) return true;
+  const m=ms.data(); if(!m.tournamentId||!m.fixtureId) return true;
+  const ts=await getDoc(doc(db,'tournaments',m.tournamentId)); if(!ts.exists()) return true;
+  const T=ts.data(), f=T.fixtures&&T.fixtures[m.fixtureId]; if(!f||f.matchId!==matchId) return true;
+  const fin=Object.values(T.fixtures).find(x=>x.stage==='final');
+  if((f.stage==='group'||f.stage==='league')&&T.status!=='group_stage'&&T.status!=='awaiting_knockout'){ alert('Knockouts are already set from this result — this match can no longer be deleted.'); return false; }
+  if(f.stage==='semi'&&fin&&fin.teamAId){ alert('The final is already set from this result — this match can no longer be deleted.'); return false; }
+  const patch={[`fixtures.${m.fixtureId}.matchId`]:null,updatedAt:Date.now()};
+  if(T.status==='awaiting_knockout') patch.status='group_stage';
+  if(f.stage==='final'&&T.status==='completed'){ patch.status='knockouts'; patch.winnerTeamId=null; }
+  await updateDoc(doc(db,'tournaments',m.tournamentId),patch);
+  return true;
+}
+window.deleteTournament = async function(){
+  if(!S.isAdmin||!curTour) return;
+  const T=curTour, ms=await getDocs(query(collection(db,'matches'),where('tournamentId','==',T.id)));
+  if(!confirm(`Delete tournament "${T.name}" and its ${ms.size} match${ms.size!==1?'es':''}?\nThis cannot be undone.`)) return;
+  if(unsubTour){ unsubTour(); unsubTour=null; } if(unsubTourMatches){ unsubTourMatches(); unsubTourMatches=null; }
+  try{
+    for(const d of ms.docs) await deleteDoc(doc(db,'matches',d.id));
+    await deleteDoc(doc(db,'tournaments',T.id));
+    curTour=null; goHome();
+  }catch(e){ console.error(e); alert('Delete failed'); }
+}
+
+// ── Console self-test of the pure tournament/points logic: run __cricSelfTest() in devtools.
+window.__cricSelfTest = function(){
+  const out=[]; const ok=(c,m)=>{ out.push((c?'✓ ':'✗ ')+m); if(!c) console.error('FAIL',m); };
+  const pairs=n=>roundRobin([...Array(n)].map((_,i)=>'t'+i)).flat();
+  for(const n of [3,4,5,6]){ const p=pairs(n), key=p.map(([a,b])=>[a,b].sort().join('-')); ok(p.length===n*(n-1)/2&&new Set(key).size===key.length,`roundRobin(${n}) → ${n*(n-1)/2} unique matches`); }
+  const fx=buildLeagueFixtures('groups',{A:['a1','a2','a3'],B:['b1','b2','b3']},[]);
+  ok(Object.keys(fx).length===6&&Object.values(fx).map(f=>f.group).join('')==='ABABAB','2×3 groups → 6 fixtures alternating A/B');
+  const pp=(bat,bowl,field={ct:0,st:0,ro:0})=>playerPoints({bat,bowl,field});
+  ok(pp({r:25,b:10,f4:3,f6:0,out:false},null).bat===25+3+4+2,'25 off 10, 3 fours → 25+3+4(25 bonus)+2(SR≥200) = 34');
+  ok(pp({r:15,b:20,f4:0,f6:0,out:true},null).bat===15+2-1,'15 off 20 → 15+2(15 bonus)−1(SR<100) = 16');
+  ok(pp({r:0,b:2,f4:0,f6:0,out:true},null).bat===-2,'duck → −2');
+  ok(pp(null,{balls:6,runs:3,wk:2,dots:4,foursConceded:0,maidens:0}).bowl===10+4+2+2,'1 over 2/3, 4 dots → 10+4+2(haul)+2(econ≤4) = 18');
+  ok(pp(null,{balls:6,runs:14,wk:0,dots:1,foursConceded:2,maidens:0}).bowl===1-2-2,'1 over 0/14, 1 dot, 2 fours → 1−2−2(econ>12) = −3');
+  ok(pp(null,null,{ct:3,st:1,ro:1}).field===9+2+4+4,'3 catches + stumping + run-out → 9+2+4+4 = 19');
+  // standings: 3-way cycle decided by NRR
+  const sm=(wA,ra,rb)=>({matchOver:true,summary:{result:{winnerSide:wA?'A':'B'},sides:{A:{runsFor:ra,ballsFor:24,runsAgainst:rb,ballsAgainst:24},B:{runsFor:rb,ballsFor:24,runsAgainst:ra,ballsAgainst:24}},players:{}}});
+  const T={format:'groups',groups:{A:['x','y','z'],B:[]},squads:{x:{name:'X',players:[]},y:{name:'Y',players:[]},z:{name:'Z',players:[]}},
+    fixtures:{f1:{stage:'group',group:'A',teamAId:'x',teamBId:'y',matchId:'m1'},f2:{stage:'group',group:'A',teamAId:'y',teamBId:'z',matchId:'m2'},f3:{stage:'group',group:'A',teamAId:'z',teamBId:'x',matchId:'m3'}}};
+  const st=tourStandings(T,{m1:sm(true,40,20),m2:sm(true,30,29),m3:sm(true,35,34)});
+  ok(st.A.map(r=>r.teamId).join('')==='xzy'&&st.A.every(r=>r.Pts===2),'3-way tie on points sorted by NRR (X +4.75, Z 0, Y −4.75)');
+  const ko=knockoutPatch({...T,format:'groups',groups:{A:['x','y'],B:['z']}},{m1:sm(true,40,20)},'semis');
+  ok(ko['fixtures.k1'].teamAId==='x'&&ko['fixtures.kf'].teamAId===null&&ko.status==='knockouts','semis seeded, final waits for winners');
+  console.log(out.join('\n')); return out;
+}
+
 // ─── DEBUG (console helpers; read-only) ───
 window.__S=()=>S;
+window.__tour=()=>({T:curTour,byId:tourMatches,standings:()=>tourStandings(curTour,tourMatches),leaders:()=>tourLeaders(curTour,tourMatches)});
 
 // ─── INIT ───
 async function init(){
   setSyncStatus('connecting');
   try{ await getDoc(doc(db,'matches','__ping__')); }catch(e){}
   setSyncStatus('live');
-  loadPlayerPool(); loadSavedTeams(); loadConfigs();
+  loadPlayerPool(); loadSavedTeams(); loadConfigs(); loadTournaments();
   // Check session
   const role=sessionStorage.getItem('csRole');
   if(role==='admin'){ S.isAdmin=true; applyRole(); goHome(); }
